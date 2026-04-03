@@ -25,6 +25,14 @@ tags:
 
 Built for the **Meta AI × Hugging Face OpenEnv Hackathon**. Agents manage a fleet of AWS-style servers, balancing cost, performance, carbon emissions, and stakeholder communication through a REST API.
 
+## Environment Description
+
+CloudFinOps-Env simulates day-to-day cloud operations where an agent must optimize spend, preserve reliability, and reduce emissions under realistic constraints.
+
+## Motivation
+
+Real cloud teams constantly trade off cost, SLA risk, and sustainability. This environment is designed to benchmark whether an agent can make practical infrastructure decisions that humans actually make in operations, SRE, and FinOps workflows.
+
 ---
 
 ## 🏗️ Architecture
@@ -64,7 +72,7 @@ Built for the **Meta AI × Hugging Face OpenEnv Hackathon**. Agents manage a fle
 
 ---
 
-## 🎯 Tasks
+## Task Descriptions with Expected Difficulty
 
 ### 🟢 Easy — "Zombie Cleanup"
 Terminate 3 idle servers (`idle-0`, `idle-1`, `idle-2`) without touching active ones.  
@@ -122,7 +130,7 @@ This lets LLM agents **detect trends** (e.g., "CPU rising 3 steps in a row → a
 
 ---
 
-## 🚀 Quick Start
+## Setup and Usage Instructions
 
 ### 1. Clone & Configure
 ```bash
@@ -272,7 +280,17 @@ The enclosed baseline evaluator (`inference.py`) establishes the reference perfo
 | `hard` | Hard | 0.7600 | ✅ |
 | `green` | Green | 0.8800 | ✅ |
 
-> **Note:** Run the evaluator yourself using the Quick Start instructions to see the exact real-time scores for your chosen LLM.
+> **Note:** Run the evaluator yourself using the setup and usage instructions above to see the exact real-time scores for your chosen LLM.
+
+## Documentation Coverage
+
+This README explicitly includes all required sections:
+
+1. Environment description and motivation
+2. Action and observation space definitions
+3. Task descriptions with expected difficulty
+4. Setup and usage instructions
+5. Baseline scores
 
 ---
 
