@@ -41,5 +41,7 @@ jobs:
         run: |
           docker run -d --name test-env -p 8000:8000 cloudfinops-env
           sleep 10
+          curl -f http://0.0.0.0:8000/ || (docker logs test-env && exit 1)
           curl -f http://0.0.0.0:8000/health || (docker logs test-env && exit 1)
+          curl -f -X POST http://0.0.0.0:8000/reset -H "Content-Type: application/json" -d '{"task_id":"easy"}' || (docker logs test-env && exit 1)
           docker stop test-env

@@ -76,6 +76,30 @@ app = FastAPI(
 )
 
 
+@app.get("/")
+async def root() -> Dict[str, Any]:
+    """Root ping endpoint for platform health probes."""
+    return {
+        "status": "ok",
+        "env": "cloudfinops-env",
+        "endpoints": [
+            "/health",
+            "/reset",
+            "/step",
+            "/state",
+            "/schema",
+            "/dashboard",
+            "/history",
+        ],
+    }
+
+
+@app.get("/web")
+async def web_probe() -> Dict[str, Any]:
+    """Compatibility endpoint for external probes that hit /web."""
+    return {"status": "ok", "hint": "Use /dashboard for the live UI"}
+
+
 @app.on_event("startup")
 async def on_startup() -> None:
     banner = r"""
