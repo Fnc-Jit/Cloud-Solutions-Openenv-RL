@@ -15,7 +15,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.9"
+          python-version: "3.10"
 
       - name: Install dependencies
         run: pip install -r server/requirements.txt pytest
@@ -40,6 +40,6 @@ jobs:
       - name: Verify container starts
         run: |
           docker run -d --name test-env -p 8000:8000 cloudfinops-env
-          sleep 5
-          curl -f http://localhost:8000/health || (docker logs test-env && exit 1)
+          sleep 10
+          curl -f http://0.0.0.0:8000/health || (docker logs test-env && exit 1)
           docker stop test-env
