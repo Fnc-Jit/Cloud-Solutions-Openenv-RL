@@ -1,0 +1,48 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openenv-cloudfinops-env"
+version = "1.0.0"
+description = "CloudFinOps: RL environment combining cloud cost-optimization, SLA incident management, and carbon emissions tracking (GreenOps)"
+requires-python = ">=3.10"
+dependencies = [
+    # Core OpenEnv runtime (provides FastAPI server + HTTP client types)
+    "openenv-core[core]>=0.2.2",
+    # Environment-specific dependencies
+    "numpy>=1.26.0",
+    "openai>=1.3.0",
+    "httpx>=0.25.0",
+    "python-dotenv>=1.0.0",
+    "tenacity>=8.2.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+]
+inference = [
+    "openai>=1.3.0",
+    "httpx>=0.25.0",
+    "tenacity>=8.2.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+# Server entry point - enables running via: uv run --project . server
+# or: python -m cloudfinops_env.server.app
+server = "cloudfinops_env.server.app:main"
+
+[tool.setuptools]
+include-package-data = true
+packages = ["cloudfinops_env", "cloudfinops_env.server"]
+package-dir = { "cloudfinops_env" = ".", "cloudfinops_env.server" = "server" }

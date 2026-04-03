@@ -1,0 +1,57 @@
+"""Data models for the CloudFinOps Environment.
+
+Pydantic schemas for observations, actions, server state, and rewards.
+Inherits from openenv.core base types for SDK compatibility.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Dict, List, Literal, Optional
+
+from pydantic import Field
+
+from openenv.core.env_server.types import Action as BaseAction, Observation as BaseObservation
+
+
+class ServerState(BaseObservation):
+    """Represents a single cloud server instance."""
+
+    id: str = Field(..., description="Unique server identifier")
+    type: str = Field(..., description="Server type, e.g. 'web', 'db', 'batch'")
+    cpu_util: float = Field(0.0, ge=0.0, description="CPU utilisation %")
+    memory_util: float = Field(0.0, ge=0.0, description="Memory utilisation %")
+    cost_per_hour: float = Field(0.0, ge=0.0, description="Hourly cost in USD")
+    status: str = Field("running", description="running | terminated | pending_scale")
+    # Trailing metrics — last N steps of CPU/memory for trend detection
+    cpu_history: List[float] = Field(default_factory=list, description="CPU util for last 3 steps")
+    memory_history: List[float] = Field(default_factory=list, description="Memory util for last 3 steps")
+
+
+class CloudFinOpsObservation(BaseObservation):
+    """Full environment observation returned to the agent."""
+
+    servers: List[ServerState] = Field(default_factory=list)
+    traffic_load: float = Field(0.0, description="Global traffic load 0-100")
+    spike_detected: bool = Field(False)
+    incidents: List[Dict[str, Any]] = Field(default_factory=list)
+    budget_remaining: float = Field(100.0)
+    time_step: int = Field(0)
+    inbox: List[str] = Field(default_factory=list, description="Text messages from humans")
+    # GreenOps: cumulative carbon emissions for the episode
+    carbon_kwh: float = Field(0.0, description="Cumulative carbon emissions in kWh")
+
+
+class CloudFinOpsAction(BaseAction):
+    """Agent action submitted each step."""
+
+    command: Literal["UPSCALE", "DOWNSCALE", "TERMINATE", "REDISTRIBUTE_LOAD", "IGNORE"] = "IGNORE"
+    target_id: Optional[str] = Field(None, description="Server ID to act on")
+    reply: Optional[str] = Field("", description="Text reply to the inbox")
+
+
+class RewardInfo(BaseObservation):
+    """Reward signal returned after each step."""
+
+    score: float = Field(0.0, ge=0.0, le=1.0)
+    is_done: bool = False
+    feedback: str = ""

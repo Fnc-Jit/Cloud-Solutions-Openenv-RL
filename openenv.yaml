@@ -1,0 +1,27 @@
+spec_version: 1
+name: cloudfinops_env
+type: space
+runtime: fastapi
+app: server.app:app
+port: 8000
+
+env:
+  - name: API_BASE_URL
+    description: The API endpoint for the LLM (OpenAI-compatible)
+    required: true
+  - name: MODEL_NAME
+    description: The model identifier to use for inference
+    required: true
+  - name: HF_TOKEN
+    description: Your Hugging Face / API key
+    required: true
+
+tasks:
+  - id: "easy"
+    name: "Zombie Cleanup"
+  - id: "medium"
+    name: "The CTO Budget Squeeze"
+  - id: "hard"
+    name: "Black Friday Chaos"
+  - id: "green"
+    name: "The Green Initiative"
