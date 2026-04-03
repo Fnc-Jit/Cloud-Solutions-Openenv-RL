@@ -6,7 +6,10 @@ from openenv.core import EnvClient
 from openenv.core.client_types import StepResult
 from openenv.core.env_server.types import State
 
-from .models import CloudFinOpsAction, CloudFinOpsObservation
+try:
+    from .models import CloudFinOpsAction, CloudFinOpsObservation, ServerState
+except ImportError:
+    from models import CloudFinOpsAction, CloudFinOpsObservation, ServerState
 
 
 class CloudFinOpsEnv(
@@ -49,7 +52,6 @@ class CloudFinOpsEnv(
         # Parse servers
         servers = []
         for s in obs_data.get("servers", []):
-            from .models import ServerState
             servers.append(ServerState(**s))
 
         observation = CloudFinOpsObservation(
