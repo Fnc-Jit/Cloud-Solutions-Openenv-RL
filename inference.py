@@ -236,15 +236,15 @@ def log_step(step: int, action: str, reward: float, done: bool, error: Optional[
     done_val = str(done).lower()
     print(f"[STEP] step={step} action={action} reward={reward:.2f} done={done_val} error={error_val}", flush=True)
 
-def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
+def log_end(success: bool, steps: int, rewards: List[float]) -> None:
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    print(f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}", flush=True)
+    print(f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}", flush=True)
 
 
 def run_task(task_id: str) -> float:
-    print(f"\n{'=' * 60}")
-    print(f"  Task: {task_id.upper()}")
-    print(f"{'=' * 60}")
+    print(f"\n{'=' * 60}", file=sys.stderr)
+    print(f"  Task: {task_id.upper()}", file=sys.stderr)
+    print(f"{'=' * 60}", file=sys.stderr)
 
     log_start(task=task_id, env="cloudfinops-env", model=MODEL_NAME)
 
@@ -263,8 +263,8 @@ def run_task(task_id: str) -> float:
             budget = obs.get("budget_remaining", 0)
             traffic = obs.get("traffic_load", 0)
             n_running = sum(1 for s in obs.get("servers", []) if s.get("status") == "running")
-            print(f"\n--- Step {step_num}/{MAX_STEPS} ---")
-            print(f"  Budget: ${budget:.4f}  |  Traffic: {traffic}%  |  Running: {n_running} servers")
+            print(f"\n--- Step {step_num}/{MAX_STEPS} ---", file=sys.stderr)
+            print(f"  Budget: ${budget:.4f}  |  Traffic: {traffic}%  |  Running: {n_running} servers", file=sys.stderr)
 
             try:
                 with _spinner("🤖 Asking LLM"):
@@ -274,16 +274,16 @@ def run_task(task_id: str) -> float:
                     time.sleep(STEP_DELAY_S)
             except Exception as exc:
                 short = str(exc).splitlines()[0][:120]
-                print(f"  [LLM Error after {LLM_MAX_RETRIES} retries] {short} — sending IGNORE")
+                print(f"  [LLM Error after {LLM_MAX_RETRIES} retries] {short} - sending IGNORE", file=sys.stderr)
                 action = {"command": "IGNORE", "target_id": None, "reply": ""}
 
             cmd = action.get("command", "IGNORE")
             target = action.get("target_id", "N/A")
             action_str = f"{cmd}({target})"
             reply_preview = (action.get("reply", "") or "")[:50]
-            print(f"  Action: {cmd} -> {target}")
+            print(f"  Action: {cmd} -> {target}", file=sys.stderr)
             if reply_preview:
-                print(f"  Reply:  \"{reply_preview}...\"")
+                print(f"  Reply:  \"{reply_preview}...\"", file=sys.stderr)
 
             error_msg = None
             try:
@@ -291,7 +291,7 @@ def run_task(task_id: str) -> float:
                 resp.raise_for_status()
                 result = resp.json()
             except Exception as step_exc:
-                print(f"  [Step Error] {step_exc} — sending IGNORE")
+                print(f"  [Step Error] {step_exc} - sending IGNORE", file=sys.stderr)
                 error_msg = str(step_exc)
                 safe_action = {"command": "IGNORE", "target_id": None, "reply": ""}
                 resp = http.post(f"{ENV_BASE_URL}/step", json={"action": safe_action})
@@ -306,20 +306,20 @@ def run_task(task_id: str) -> float:
             steps_taken = step_num
 
             log_step(step=step_num, action=action_str, reward=reward, done=done, error=error_msg)
-            print(f"  Reward: {reward:+.1f}  |  Done: {done}")
+            print(f"  Reward: {reward:+.1f}  |  Done: {done}", file=sys.stderr)
 
             if done:
                 score = result.get("info", {}).get("grader_score", 0.0)
-                print(f"\n  ✅ FINAL SCORE: {score:.4f}")
+                print(f"\n  FINAL SCORE: {score:.4f}", file=sys.stderr)
                 break
 
         if not done:
-            print("\n  ⚠️  Max steps reached.")
+            print("\n  Max steps reached.", file=sys.stderr)
 
     finally:
         # ALWAYS emit [END] — even on crash (hackathon requirement)
         success = score > 0.0
-        log_end(success=success, steps=steps_taken, score=score, rewards=rewards_list)
+        log_end(success=success, steps=steps_taken, rewards=rewards_list)
 
     return score
 
@@ -329,47 +329,45 @@ def main() -> None:
 
     masked_key = ('*' * 4 + API_KEY[-4:]) if len(API_KEY) > 4 else '****'
 
-    print("=" * 60)
-    print("  ☁️  CloudFinOps-Env Baseline Evaluator")
-    print("=" * 60)
-    print(f"  Provider:    {LLM_PROVIDER.upper()}")
-    print(f"  Model:       {MODEL_NAME}")
-    print(f"  API:         {API_BASE_URL}")
-    print(f"  API Key:     {masked_key}")
-    print(f"  Env:         {ENV_BASE_URL}")
-    print(f"  Max Steps:   {MAX_STEPS}")
-    print(f"  LLM Retries: {LLM_MAX_RETRIES}")
-    print()
-    print("  ┌──────────────────────────────────────────────────┐")
-    print(f"  │  📊 Live Dashboard: {ENV_BASE_URL}/dashboard      │")
-    print("  │  Open in browser to watch the agent in action!  │")
-    print("  └──────────────────────────────────────────────────┘")
+    print("=" * 60, file=sys.stderr)
+    print("  CloudFinOps-Env Baseline Evaluator", file=sys.stderr)
+    print("=" * 60, file=sys.stderr)
+    print(f"  Provider:    {LLM_PROVIDER.upper()}", file=sys.stderr)
+    print(f"  Model:       {MODEL_NAME}", file=sys.stderr)
+    print(f"  API:         {API_BASE_URL}", file=sys.stderr)
+    print(f"  API Key:     {masked_key}", file=sys.stderr)
+    print(f"  Env:         {ENV_BASE_URL}", file=sys.stderr)
+    print(f"  Max Steps:   {MAX_STEPS}", file=sys.stderr)
+    print(f"  LLM Retries: {LLM_MAX_RETRIES}", file=sys.stderr)
+    print(file=sys.stderr)
+    print("  Live Dashboard:", file=sys.stderr)
+    print(f"  {ENV_BASE_URL}/dashboard", file=sys.stderr)
 
     scores: Dict[str, float] = {}
     for task_id in TASKS:
         try:
             scores[task_id] = run_task(task_id)
         except Exception as exc:
-            print(f"  ❌ Task '{task_id}' failed: {exc}")
+            print(f"  Task '{task_id}' failed: {exc}", file=sys.stderr)
             scores[task_id] = 0.0
 
     elapsed = time.time() - start_time
-    print(f"\n{'=' * 60}")
-    print("  FINAL RESULTS")
-    print(f"{'=' * 60}")
+    print(f"\n{'=' * 60}", file=sys.stderr)
+    print("  FINAL RESULTS", file=sys.stderr)
+    print(f"{'=' * 60}", file=sys.stderr)
     for tid, score in scores.items():
         bar = "█" * int(score * 20) + "░" * (20 - int(score * 20))
-        status = "✅" if score > 0.0 else "❌"
-        print(f"  {status} {tid:>8s}: {score:.4f}  {bar}")
+        status = "PASS" if score > 0.0 else "FAIL"
+        print(f"  {status:>4s} {tid:>8s}: {score:.4f}  {bar}", file=sys.stderr)
     avg = sum(scores.values()) / len(scores) if scores else 0.0
-    print(f"  {'AVERAGE':>10s}: {avg:.4f}")
-    print(f"  {'TIME':>10s}: {elapsed:.1f}s")
-    print(f"{'=' * 60}")
+    print(f"  {'AVERAGE':>10s}: {avg:.4f}", file=sys.stderr)
+    print(f"  {'TIME':>10s}: {elapsed:.1f}s", file=sys.stderr)
+    print(f"{'=' * 60}", file=sys.stderr)
 
     for tid, score in scores.items():
         assert 0.0 <= score <= 1.0, f"Score for {tid} out of range: {score}"
 
-    print("\n  ✅ All scores within valid 0.0–1.0 range.")
+    print("\n  All scores within valid 0.0-1.0 range.", file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -168,6 +168,16 @@ uv run server
 uvicorn server.app:app --reload --host 0.0.0.0 --port 8000
 ```
 
+### Alternative: pip + OpenEnv Core Scaffold
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -U pip
+pip install "openenv-core[core]>=0.2.2" pytest
+pip install -e .
+```
+
 ### Alternative: Using the Python SDK
 
 ```python
@@ -315,6 +325,19 @@ GitHub Actions runs automatically on every push/PR:
 2. **Syntax Check** — AST parse all Python files
 3. **OpenEnv Spec** — Verify `openenv.yaml` has ≥3 tasks
 4. **Docker Build** — Full image build + container smoke test
+
+## ✅ Hackathon Submission Checklist
+
+Before final submission, verify all of the following:
+
+1. `openenv.yaml` defines spec metadata, env vars, and 3+ tasks.
+2. `inference.py` is at repository root and uses OpenAI client with `API_BASE_URL`, `MODEL_NAME`, `HF_TOKEN`.
+3. Inference stdout emits only required protocol lines:
+  - `[START] task=<task_name> env=<benchmark> model=<model_name>`
+  - `[STEP] step=<n> action=<action_str> reward=<0.00> done=<true|false> error=<msg|null>`
+  - `[END] success=<true|false> steps=<n> rewards=<r1,r2,...,rn>`
+4. `docker build` and `docker run` start successfully and endpoints respond.
+5. Space root URL returns HTTP 200 and `/reset` responds successfully.
 
 ---
 
