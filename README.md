@@ -18,7 +18,7 @@ tags:
 [![Validate](https://github.com/Fnc-Jit/Cloud-Solutions_Re/actions/workflows/validate.yml/badge.svg)](https://github.com/Fnc-Jit/Cloud-Solutions_Re/actions/workflows/validate.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![OpenEnv](https://img.shields.io/badge/OpenEnv-compatible-green.svg)](https://huggingface.co/openenv)
-[![Tests](https://img.shields.io/badge/tests-38%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-40%20passed-brightgreen.svg)]()
 
 ![CloudFinOps Dashboard](assets/dashboard.png)
 ![CloudFinOps Dashboard Details](assets/dashboard_details.png)
@@ -60,7 +60,7 @@ Built for the **Meta AI × Hugging Face OpenEnv Hackathon**. Agents manage a fle
 | ⏱️ **Delayed Scaling** | UPSCALE queues for next step — agents must plan ahead |
 | 🔒 **Deterministic Noise** | Hash-seeded metric jitter — fully reproducible episodes |
 | 📈 **Live Dashboard** | Real-time glassmorphism web UI at `/dashboard` with sparklines |
-| 🧪 **38 Unit Tests** | Comprehensive pytest suite + GitHub Actions CI |
+| 🧪 **40 Unit Tests** | Comprehensive pytest suite + GitHub Actions CI |
 
 ---
 
@@ -134,6 +134,10 @@ cp .env.example .env
 
 ### 2. Build Docker Image
 ```bash
+# Recommended: standalone build (no external base image dependency)
+docker build -t cloudfinops-env:latest -f server/Dockerfile.standalone .
+
+# Alternative: Meta base image (requires access to ghcr.io/meta-pytorch/openenv-base)
 docker build -t cloudfinops-env:latest -f server/Dockerfile .
 ```
 
@@ -215,7 +219,6 @@ openenv push --repo-id your-username/cloudfinops-env --private
 | `POST` | `/step` | Submit an action and advance the engine |
 | `GET` | `/state` | Current observation (read-only, no side effects) |
 | `GET` | `/schema` | Action/Observation JSON schemas (OpenEnv standard) |
-| `WS` | `/ws` | WebSocket persistent session (OpenEnv standard) |
 | `GET` | `/dashboard` | Real-time glassmorphism web dashboard |
 | `GET` | `/history` | Agent action history for current episode |
 
@@ -278,7 +281,7 @@ The enclosed baseline evaluator (`inference.py`) establishes the reference perfo
 
 ## 🧪 Testing
 
-The project includes **38 unit tests** across 9 test classes:
+The project includes **40 unit tests** across 10 test classes:
 
 | Test Class | Tests | What it covers |
 |-----------|-------|----------------|

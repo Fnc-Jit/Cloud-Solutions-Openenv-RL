@@ -1,0 +1,27 @@
+# Standalone Dockerfile — no external base image dependency
+# Uses python:3.11-slim for maximum compatibility with judge CI/CD
+# This is the recommended Dockerfile for hackathon submission.
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY server/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+
+COPY . /app
+
+ENV PYTHONPATH="/app:$PYTHONPATH"
+
+EXPOSE 8000
+
+# Health check hits /health for liveness and /reset for functional readiness
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8000/health && \
+        curl -sf -X POST http://localhost:8000/reset -H "Content-Type: application/json" -d '{"task_id":"easy"}' || exit 1
+
+CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "8000"]

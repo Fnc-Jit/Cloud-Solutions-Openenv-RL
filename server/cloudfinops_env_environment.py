@@ -374,9 +374,18 @@ class CloudFinOpsEngine:
         uptime_score = 0.0 if self.sla_breached else 1.0
         cost_saved_pct = 1.0 - (self.total_cost_spent / self.initial_budget) if self.initial_budget > 0 else 0.0
         cost_efficiency = _clamp(cost_saved_pct, 0.0, 1.0)
-        base = uptime_score * 0.6 + cost_efficiency * 0.4
-        inbox_bonus = 0.1 if not self.inbox else 0.0
-        return round(_clamp(base + inbox_bonus, 0.0, 1.0), 4)
+        base = uptime_score * 0.6 + cost_efficiency * 0.3
+
+        inbox_bonus = 0.0
+        if not self.inbox:
+            inbox_bonus = 0.1
+
+        running_count = sum(1 for s in self.servers if s.status == "running")
+        survival_bonus = 0.0
+        if running_count >= 6:
+            survival_bonus = 0.1
+
+        return round(_clamp(base + inbox_bonus + survival_bonus, 0.0, 1.0), 4)
 
     def _grade_green(self) -> float:
         if self.initial_carbon_rate > 0:

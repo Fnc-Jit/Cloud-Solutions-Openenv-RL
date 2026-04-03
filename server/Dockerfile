@@ -71,9 +71,10 @@ ENV PATH="/app/.venv/bin:$PATH"
 # Set PYTHONPATH so imports work correctly
 ENV PYTHONPATH="/app/env:$PYTHONPATH"
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+# Health check — liveness + functional readiness (/reset)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8000/health && \
+        curl -sf -X POST http://localhost:8000/reset -H "Content-Type: application/json" -d '{"task_id":"easy"}' || exit 1
 
 # Run the FastAPI server
 # The module path is constructed to work with the /app/env structure

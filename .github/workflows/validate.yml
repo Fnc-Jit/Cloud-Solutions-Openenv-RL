@@ -35,7 +35,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build Docker image
-        run: docker build -f server/Dockerfile -t cloudfinops-env .
+        run: docker build -f server/Dockerfile.standalone -t cloudfinops-env .
 
       - name: Verify container starts
         run: |

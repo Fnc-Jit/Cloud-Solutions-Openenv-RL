@@ -13,6 +13,8 @@ import os
 import sys
 from typing import Any, Dict, List, Optional
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
@@ -56,52 +58,10 @@ logging.getLogger("uvicorn.access").addFilter(_PollFilter())
 _env = CloudFinOpsEnvironment()
 
 # ---------------------------------------------------------------------------
-# Request / Response models
+# Lifespan — startup/shutdown events (replaces deprecated @app.on_event)
 # ---------------------------------------------------------------------------
-class ResetRequest(BaseModel):
-    task_id: str = "easy"
-
-
-class StepRequestBody(BaseModel):
-    action: Dict[str, Any]
-
-
-# ---------------------------------------------------------------------------
-# FastAPI app
-# ---------------------------------------------------------------------------
-app = FastAPI(
-    title="CloudFinOps-Env",
-    version="1.0.0",
-    description="Cloud Cost-Optimization RL Environment — OpenEnv compatible.",
-)
-
-
-@app.get("/")
-async def root() -> Dict[str, Any]:
-    """Root ping endpoint for platform health probes."""
-    return {
-        "status": "ok",
-        "env": "cloudfinops-env",
-        "endpoints": [
-            "/health",
-            "/reset",
-            "/step",
-            "/state",
-            "/schema",
-            "/dashboard",
-            "/history",
-        ],
-    }
-
-
-@app.get("/web")
-async def web_probe() -> Dict[str, Any]:
-    """Compatibility endpoint for external probes that hit /web."""
-    return {"status": "ok", "hint": "Use /dashboard for the live UI"}
-
-
-@app.on_event("startup")
-async def on_startup() -> None:
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     banner = r"""
     ╔══════════════════════════════════════════════════════════════╗
     ║                                                              ║
@@ -127,6 +87,66 @@ async def on_startup() -> None:
     """
     print(banner)
     log.info("Server started — using persistent singleton environment")
+    yield
+
+# ---------------------------------------------------------------------------
+# Request / Response models
+# ---------------------------------------------------------------------------
+class ResetRequest(BaseModel):
+    task_id: str = "easy"
+
+
+class StepRequestBody(BaseModel):
+    action: Dict[str, Any]
+
+    def validate_action(self) -> None:
+        valid_commands = {"UPSCALE", "DOWNSCALE", "TERMINATE", "REDISTRIBUTE_LOAD", "IGNORE"}
+        cmd = self.action.get("command")
+        if cmd not in valid_commands:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid command '{cmd}'. Must be one of: {sorted(valid_commands)}",
+            )
+        if cmd in ("TERMINATE", "UPSCALE", "DOWNSCALE") and not self.action.get("target_id"):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Command '{cmd}' requires a 'target_id' field.",
+            )
+
+
+# ---------------------------------------------------------------------------
+# FastAPI app
+# ---------------------------------------------------------------------------
+app = FastAPI(
+    title="CloudFinOps-Env",
+    version="1.0.0",
+    description="Cloud Cost-Optimization RL Environment — OpenEnv compatible.",
+    lifespan=lifespan,
+)
+
+
+@app.get("/")
+async def root() -> Dict[str, Any]:
+    """Root ping endpoint for platform health probes."""
+    return {
+        "status": "ok",
+        "env": "cloudfinops-env",
+        "endpoints": [
+            "/health",
+            "/reset",
+            "/step",
+            "/state",
+            "/schema",
+            "/dashboard",
+            "/history",
+        ],
+    }
+
+
+@app.get("/web")
+async def web_probe() -> Dict[str, Any]:
+    """Compatibility endpoint for external probes that hit /web."""
+    return {"status": "ok", "hint": "Use /dashboard for the live UI"}
 
 
 # ---------------------------------------------------------------------------
@@ -171,6 +191,7 @@ async def reset(req: ResetRequest) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 @app.post("/step")
 async def step(req: StepRequestBody) -> Dict[str, Any]:
+    req.validate_action()
     try:
         action = CloudFinOpsAction(**req.action)
     except Exception as exc:
