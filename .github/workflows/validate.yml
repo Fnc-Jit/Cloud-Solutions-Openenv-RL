@@ -21,7 +21,7 @@ jobs:
         run: pip install -r server/requirements.txt pytest
 
       - name: Run unit tests
-        run: pytest tests/ -v --tb=short
+        run: PYTHONPATH=. pytest tests/ -v --tb=short
 
       - name: Syntax check
         run: python -c "import ast; [ast.parse(open(f).read()) for f in ['server/cloudfinops_env_environment.py','server/app.py','models.py','inference.py']]"

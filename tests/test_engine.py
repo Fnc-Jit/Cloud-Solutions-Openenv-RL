@@ -6,7 +6,7 @@ and trailing metrics history.
 """
 
 import pytest
-from cloudfinops_env.server.cloudfinops_env_environment import (
+from server.cloudfinops_env_environment import (
     CloudFinOpsEngine,
     INSTANCE_CATALOG,
     UPSCALE_PATH,
@@ -16,7 +16,7 @@ from cloudfinops_env.server.cloudfinops_env_environment import (
     _deterministic_noise,
     _clamp,
 )
-from cloudfinops_env.models import CloudFinOpsAction, CloudFinOpsObservation, ServerState
+from models import CloudFinOpsAction, CloudFinOpsObservation, ServerState
 
 
 # ---------------------------------------------------------------------------
