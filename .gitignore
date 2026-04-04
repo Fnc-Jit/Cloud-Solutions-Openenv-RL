@@ -8,4 +8,3 @@ build/
 venv/
 .venv/
 uv.lock
-.env

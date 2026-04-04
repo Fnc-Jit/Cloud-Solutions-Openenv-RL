@@ -1,5 +1,6 @@
 spec_version: 1
 name: cloudfinops_env
+description: "CloudFinOps: RL environment combining cloud cost-optimization, SLA incident management, and carbon emissions tracking (GreenOps). Agents manage a fleet of AWS-style servers, balancing cost, performance, carbon emissions, and stakeholder communication."
 type: space
 runtime: fastapi
 app: server.app:app
@@ -25,3 +26,5 @@ tasks:
     name: "Black Friday Chaos"
   - id: "green"
     name: "The Green Initiative"
+  - id: "expert"
+    name: "Multi-Region Disaster Recovery"
