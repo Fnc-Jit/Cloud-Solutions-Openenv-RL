@@ -180,6 +180,32 @@ def _green_servers() -> List[ServerState]:
     ]
 
 
+def _expert_servers() -> List[ServerState]:
+    """14 servers across 3 simulated regions. Region eu-west-1 is failing —
+    agents must redistribute load to us-east-1 and ap-south-1 while managing
+    a tight budget and escalating traffic."""
+    return [
+        # eu-west-1 — failing region (high CPU, degrading)
+        ServerState(id="eu-web-0",    type="t3.large",    cpu_util=88.0, memory_util=75.0, cost_per_hour=INSTANCE_CATALOG["t3.large"]["cost"],    status="running"),
+        ServerState(id="eu-web-1",    type="t3.large",    cpu_util=82.0, memory_util=70.0, cost_per_hour=INSTANCE_CATALOG["t3.large"]["cost"],    status="running"),
+        ServerState(id="eu-db-0",     type="r6g.large",   cpu_util=90.0, memory_util=80.0, cost_per_hour=INSTANCE_CATALOG["r6g.large"]["cost"],   status="running"),
+        ServerState(id="eu-compute-0",type="c5.xlarge",   cpu_util=78.0, memory_util=65.0, cost_per_hour=INSTANCE_CATALOG["c5.xlarge"]["cost"],   status="running"),
+        # us-east-1 — healthy region with capacity
+        ServerState(id="us-web-0",    type="t3.medium",   cpu_util=25.0, memory_util=20.0, cost_per_hour=INSTANCE_CATALOG["t3.medium"]["cost"],   status="running"),
+        ServerState(id="us-web-1",    type="t3.medium",   cpu_util=30.0, memory_util=22.0, cost_per_hour=INSTANCE_CATALOG["t3.medium"]["cost"],   status="running"),
+        ServerState(id="us-db-0",     type="r6g.xlarge",  cpu_util=35.0, memory_util=28.0, cost_per_hour=INSTANCE_CATALOG["r6g.xlarge"]["cost"],  status="running"),
+        ServerState(id="us-compute-0",type="c5.large",    cpu_util=20.0, memory_util=15.0, cost_per_hour=INSTANCE_CATALOG["c5.large"]["cost"],    status="running"),
+        ServerState(id="us-batch-0",  type="m5.large",    cpu_util=10.0, memory_util=8.0,  cost_per_hour=INSTANCE_CATALOG["m5.large"]["cost"],    status="running"),
+        # ap-south-1 — warm standby
+        ServerState(id="ap-web-0",    type="t3.medium",   cpu_util=15.0, memory_util=12.0, cost_per_hour=INSTANCE_CATALOG["t3.medium"]["cost"],   status="running"),
+        ServerState(id="ap-db-0",     type="r6g.medium",  cpu_util=10.0, memory_util=8.0,  cost_per_hour=INSTANCE_CATALOG["r6g.medium"]["cost"],  status="running"),
+        ServerState(id="ap-batch-0",  type="m5.large",    cpu_util=5.0,  memory_util=4.0,  cost_per_hour=INSTANCE_CATALOG["m5.large"]["cost"],    status="running"),
+        # Zombies in failing region
+        ServerState(id="eu-idle-0",   type="t3.micro",    cpu_util=0.0,  memory_util=0.0,  cost_per_hour=INSTANCE_CATALOG["t3.micro"]["cost"],    status="running"),
+        ServerState(id="eu-idle-1",   type="t3.micro",    cpu_util=0.0,  memory_util=0.0,  cost_per_hour=INSTANCE_CATALOG["t3.micro"]["cost"],    status="running"),
+    ]
+
+
 TASK_CONFIGS: Dict[str, Dict[str, Any]] = {
     "easy": {
         "servers_fn": _easy_servers,
@@ -220,6 +246,17 @@ TASK_CONFIGS: Dict[str, Dict[str, Any]] = {
             "Sustainability Lead: Our c5 and m5 instances produce 3× the emissions of r6g. Please prioritise migration.",
         ],
     },
+    "expert": {
+        "servers_fn": _expert_servers,
+        "budget": 6.0,
+        "traffic_load": 60.0,
+        "spike": True,
+        "inbox": [
+            "SRE Alert: eu-west-1 region experiencing cascading failures. DB and compute nodes at critical capacity.",
+            "VP Engineering: Activate disaster recovery plan. Shift load to us-east-1 and ap-south-1 immediately.",
+            "Finance: Budget is constrained — terminate zombies first, then redistribute. No budget overruns.",
+        ],
+    },
 }
 
 
@@ -252,6 +289,7 @@ class CloudFinOpsEngine:
         self.initial_carbon_rate: float = 0.0
         self._cpu_history: Dict[str, List[float]] = {}
         self._mem_history: Dict[str, List[float]] = {}
+        self._inbox_replied_early: bool = False
 
     def reset(self, task_id: str) -> CloudFinOpsObservation:
         cfg = TASK_CONFIGS.get(task_id)
@@ -282,6 +320,7 @@ class CloudFinOpsEngine:
         )
         self._cpu_history = {s.id: [s.cpu_util] for s in self.servers}
         self._mem_history = {s.id: [s.memory_util] for s in self.servers}
+        self._inbox_replied_early = False
         return self._obs()
 
     def step(self, action: CloudFinOpsAction) -> Tuple[CloudFinOpsObservation, float, bool, Dict[str, Any]]:
@@ -351,6 +390,8 @@ class CloudFinOpsEngine:
             return self._grade_hard()
         elif self.task_id == "green":
             return self._grade_green()
+        elif self.task_id == "expert":
+            return self._grade_expert()
         else:
             return 0.0
 
@@ -375,7 +416,7 @@ class CloudFinOpsEngine:
         cost_saved_pct = 1.0 - (self.total_cost_spent / self.initial_budget) if self.initial_budget > 0 else 0.0
         cost_efficiency = _clamp(cost_saved_pct, 0.0, 1.0)
         base = uptime_score * 0.6 + cost_efficiency * 0.4
-        inbox_bonus = 0.1 if not self.inbox else 0.0
+        inbox_bonus = 0.1 if self._inbox_replied_early else 0.0
         return round(_clamp(base + inbox_bonus, 0.0, 1.0), 4)
 
     def _grade_green(self) -> float:
@@ -395,6 +436,32 @@ class CloudFinOpsEngine:
         cost_efficiency = _clamp(cost_saved_pct, 0.0, 1.0)
         inbox_bonus = 0.1 if not self.inbox else 0.0
         base = carbon_score * 0.5 + uptime_score * 0.3 + cost_efficiency * 0.1
+        return round(_clamp(base + inbox_bonus, 0.0, 1.0), 4)
+
+    def _grade_expert(self) -> float:
+        """Multi-Region Disaster Recovery grading.
+        - Zombies terminated (eu-idle-0, eu-idle-1): 20%
+        - EU region servers terminated or downscaled (eu-web-*, eu-db-0, eu-compute-0): 30%
+        - No SLA breach on healthy regions (us-*, ap-*): 30%
+        - Inbox replies sent (clears all 3 messages): 20%
+        """
+        zombie_ids = {"eu-idle-0", "eu-idle-1"}
+        terminated_zombies = len(zombie_ids & set(self.terminated_ids))
+        zombie_score = terminated_zombies / 2.0
+
+        eu_target_ids = {"eu-web-0", "eu-web-1", "eu-db-0", "eu-compute-0"}
+        eu_handled = sum(1 for sid in eu_target_ids if sid in self.terminated_ids)
+        eu_score = eu_handled / len(eu_target_ids)
+
+        healthy_ids = {s.id for s in self.servers if s.id.startswith(("us-", "ap-"))}
+        healthy_breached = any(
+            inc["server"] in healthy_ids for inc in self.incidents
+        )
+        uptime_score = 0.0 if (self.sla_breached or healthy_breached) else 1.0
+
+        inbox_bonus = 0.2 if not self.inbox else 0.0
+
+        base = zombie_score * 0.2 + eu_score * 0.3 + uptime_score * 0.3
         return round(_clamp(base + inbox_bonus, 0.0, 1.0), 4)
 
     def _obs(self) -> CloudFinOpsObservation:
@@ -477,6 +544,8 @@ class CloudFinOpsEngine:
         if action.reply and self.inbox:
             reward += 2.0
             self.inbox = []
+            if self.time_step <= 3:
+                self._inbox_replied_early = True
 
         return reward
 
@@ -498,6 +567,12 @@ class CloudFinOpsEngine:
             for s in self.servers:
                 if s.status == "running" and s.type.startswith("r6g"):
                     s.cpu_util = _clamp(s.cpu_util + 4.0 * math.log1p(self.time_step))
+        elif self.task_id == "expert":
+            self.traffic_load = _clamp(self.traffic_load + 3.0 * math.log1p(self.time_step))
+            self.spike_detected = True
+            for s in self.servers:
+                if s.status == "running" and s.id.startswith("eu-"):
+                    s.cpu_util = _clamp(s.cpu_util + 6.0 * math.log1p(self.time_step))
         else:
             self.traffic_load = _clamp(self.traffic_load + 0.5)
 
