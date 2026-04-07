@@ -152,7 +152,9 @@ async def schema() -> Dict[str, Any]:
 # /reset  — POST {"task_id": "easy"}
 # ---------------------------------------------------------------------------
 @app.post("/reset")
-async def reset(req: ResetRequest) -> Dict[str, Any]:
+async def reset(req: Optional[ResetRequest] = None) -> Dict[str, Any]:
+    if req is None:
+        req = ResetRequest()
     valid = {"easy", "medium", "hard", "green"}
     if req.task_id not in valid:
         raise HTTPException(status_code=422, detail=f"task_id must be one of {sorted(valid)}")
