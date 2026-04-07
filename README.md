@@ -132,12 +132,27 @@ This lets LLM agents **detect trends** (e.g., "CPU rising 3 steps in a row → a
 
 ## Setup and Usage Instructions
 
-### 1. Clone & Configure
+Before submitting, ensure the following variables are defined in your environment configuration:
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `API_BASE_URL` | Yes | `https://router.huggingface.co/v1` | The API endpoint for the LLM |
+| `MODEL_NAME` | Yes | `openai/gpt-oss-120b` | The model identifier to use for inference |
+| `HF_TOKEN` | Yes | — | Your Hugging Face / API key |
+| `LOCAL_IMAGE_NAME` | No | — | Local Docker image name for `from_docker_image()` |
+
+Defaults are set for `API_BASE_URL` and `MODEL_NAME`. Groq is available as a test provider:
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `LLM_PROVIDER` | No | `huggingface` | Set to `groq` to switch provider |
+| `GROQ_API_KEY` | If groq | *(built-in for testing)* | Groq API key |
+| `GROQ_MODEL_NAME` | No | `meta-llama/llama-4-scout-17b-16e-instruct` | Groq model |
+
+### 1. Clone
 ```bash
 git clone https://github.com/Fnc-Jit/Cloud-Solutions_Re.git
 cd cloudfinops_env
-cp .env.example .env
-# Edit .env with your API keys
 ```
 
 ### 2. Build Docker Image
@@ -147,18 +162,29 @@ docker build -t cloudfinops-env:latest -f server/Dockerfile .
 
 ### 3. Start the Environment Server
 ```bash
-docker run --env-file .env -p 8000:8000 cloudfinops-env:latest
+docker run -p 8000:8000 cloudfinops-env:latest
 ```
 
 ### 4. Open the Live Dashboard
 Open `http://localhost:8000/dashboard` in your browser.
 
-### 5. Run the Agent Evaluator
+### 5. Run the Agent Evaluator (Hugging Face)
 ```bash
-docker run --env-file .env -e ENV_BASE_URL=http://host.docker.internal:8000 cloudfinops-env:latest python3 /app/env/inference.py
+docker run \
+  -e HF_TOKEN=$HF_TOKEN \
+  -e ENV_BASE_URL=http://host.docker.internal:8000 \
+  cloudfinops-env:latest python3 /app/env/inference.py
 ```
 
-### 6. Run Tests
+### 6. Run the Agent Evaluator (Groq — for testing)
+```bash
+docker run \
+  -e LLM_PROVIDER=groq \
+  -e ENV_BASE_URL=http://host.docker.internal:8000 \
+  cloudfinops-env:latest python3 /app/env/inference.py
+```
+
+### 7. Run Tests
 ```bash
 docker run --rm cloudfinops-env:latest python3 -m pytest tests/ -v
 ```
@@ -174,6 +200,21 @@ uv run server
 
 # Or with uvicorn directly
 uvicorn server.app:app --reload --host 0.0.0.0 --port 8000
+```
+
+### Alternative: Running Locally (Direct)
+
+```bash
+# Export your HF token, then run:
+export HF_TOKEN=hf_your_token_here
+python inference.py
+
+# Or test with Groq (built-in key):
+LLM_PROVIDER=groq python inference.py
+
+# Override any default:
+# export MODEL_NAME=my-custom-model
+# python inference.py
 ```
 
 ### Alternative: pip + OpenEnv Core Scaffold
@@ -326,13 +367,14 @@ python3 -m pytest tests/ -v --tb=short
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
+| `API_BASE_URL` | Yes | `https://router.huggingface.co/v1` | LLM API endpoint (OpenAI-compatible) |
+| `MODEL_NAME` | Yes | `openai/gpt-oss-120b` | Model identifier |
+| `HF_TOKEN` | Yes | — | Hugging Face token / API key |
 | `LLM_PROVIDER` | No | `huggingface` | `groq` or `huggingface` |
-| `GROQ_API_KEY` | If groq | — | Groq API key |
-| `GROQ_MODEL_NAME` | No | `llama-3.3-70b-versatile` | Groq model |
-| `API_BASE_URL` | If HF | `https://router.huggingface.co/v1` | HF router URL |
-| `MODEL_NAME` | If HF | `openai/gpt-4o` | Model identifier |
-| `HF_TOKEN` | Yes | — | Hugging Face token |
+| `GROQ_API_KEY` | If groq | *(built-in for testing)* | Groq API key |
+| `GROQ_MODEL_NAME` | No | `meta-llama/llama-4-scout-17b-16e-instruct` | Groq model |
 | `ENV_BASE_URL` | No | `http://localhost:8000` | Environment server URL |
+| `LOCAL_IMAGE_NAME` | No | — | Local Docker image name for `from_docker_image()` |
 
 ---
 
@@ -353,9 +395,22 @@ Before final submission, verify all of the following:
 3. Inference stdout emits only required protocol lines:
   - `[START] task=<task_name> env=<benchmark> model=<model_name>`
   - `[STEP] step=<n> action=<action_str> reward=<0.00> done=<true|false> error=<msg|null>`
-  - `[END] success=<true|false> steps=<n> rewards=<r1,r2,...,rn>`
+  - `[END] success=<true|false> steps=<n> score=<score> rewards=<r1,r2,...,rn>`
 4. `docker build` and `docker run` start successfully and endpoints respond.
 5. Space root URL returns HTTP 200 and `/reset` responds successfully.
+
+---
+
+## 🏅 Hackathon Evaluation Phases
+
+### Phase 1: Automated Validation *(Pass/Fail Gate)*
+HF Space deploys, OpenEnv spec compliance, Dockerfile builds, baseline reproduces, 3+ tasks with graders.
+
+### Phase 2: Agentic Evaluation *(Scored)*
+Baseline agent re-run, standard Open LLM agent (e.g. Nemotron 3 Super) run against all environments, score variance check.
+
+### Phase 3: Human Review
+Top submissions reviewed by Meta and Hugging Face engineers for real-world utility, creativity, and exploit checks.
 
 ---
 
@@ -381,7 +436,7 @@ cloudfinops_env/
 ├── pyproject.toml           # Project metadata, deps, entry point
 ├── README.md                # This file
 ├── inference.py             # LLM baseline evaluator
-├── .env.example             # Template environment variables
+├── .env.example             # Reference template for environment variables
 ├── .gitignore
 ├── server/
 │   ├── __init__.py          # Server module exports

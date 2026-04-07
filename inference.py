@@ -8,6 +8,20 @@ Uses the `openai` SDK and the following MANDATORY environment variables:
   HF_TOKEN      — Your Hugging Face / API key
 
 Participants must use OpenAI Client for all LLM calls using above variables.
+
+Quick-start (export variables, then run directly):
+
+  export API_BASE_URL=https://router.huggingface.co/v1
+  export MODEL_NAME=openai/gpt-4o
+  export HF_TOKEN=hf_xxxxx
+  python inference.py
+
+To test with Groq instead:
+
+  export LLM_PROVIDER=groq
+  export GROQ_API_KEY=gsk_xxxxx
+  export GROQ_MODEL_NAME=llama-3.3-70b-versatile
+  python inference.py
 """
 
 from __future__ import annotations
@@ -21,34 +35,41 @@ import time
 from contextlib import contextmanager
 from typing import Any, Dict, List, Optional
 
-# Auto-load .env file if present (judges can use .env.example as a template)
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass  # python-dotenv is optional; env vars can be exported in shell instead
-
 import httpx
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, before_sleep_log
 import logging as _logging
 
 # ---------------------------------------------------------------------------
+# Default credentials — override via environment variables if needed
+# ---------------------------------------------------------------------------
+# Hugging Face defaults
+_DEFAULT_HF_API_BASE = "https://router.huggingface.co/v1"
+_DEFAULT_HF_MODEL    = "openai/gpt-oss-120b"
+_DEFAULT_HF_TOKEN    = ""
+
+# Groq defaults (for testing)
+_DEFAULT_GROQ_API_BASE = "https://api.groq.com/openai/v1"
+_DEFAULT_GROQ_MODEL    = "meta-llama/llama-4-scout-17b-16e-instruct"
+_DEFAULT_GROQ_API_KEY  = ""
+
+# ---------------------------------------------------------------------------
 # Provider Selection — reads LLM_PROVIDER ("groq" or "huggingface")
+# Environment variables override the defaults above when set.
 # ---------------------------------------------------------------------------
 LLM_PROVIDER: str = os.environ.get("LLM_PROVIDER", "huggingface").lower()
 
 if LLM_PROVIDER == "groq":
-    API_BASE_URL: str = "https://api.groq.com/openai/v1"
-    MODEL_NAME: str = os.environ.get("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
-    API_KEY: str = os.environ.get("GROQ_API_KEY", "")
+    API_BASE_URL: str = os.environ.get("API_BASE_URL", _DEFAULT_GROQ_API_BASE)
+    MODEL_NAME: str = os.environ.get("GROQ_MODEL_NAME", _DEFAULT_GROQ_MODEL)
+    API_KEY: str = os.environ.get("GROQ_API_KEY", _DEFAULT_GROQ_API_KEY)
 else:  # huggingface (default)
-    API_BASE_URL: str = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
-    MODEL_NAME: str = os.environ.get("MODEL_NAME", "openai/gpt-4o")
-    API_KEY: str = os.environ.get("HF_TOKEN", "")
+    API_BASE_URL: str = os.environ.get("API_BASE_URL", _DEFAULT_HF_API_BASE)
+    MODEL_NAME: str = os.environ.get("MODEL_NAME", _DEFAULT_HF_MODEL)
+    API_KEY: str = os.environ.get("HF_TOKEN", _DEFAULT_HF_TOKEN)
 
 # Kept for hackathon compliance checks (pre_validation.py looks for these names)
-HF_TOKEN: str = os.environ.get("HF_TOKEN", "")
+HF_TOKEN: str = os.environ.get("HF_TOKEN", _DEFAULT_HF_TOKEN)
 
 # CloudFinOps environment URL (local Docker or HF Space)
 ENV_BASE_URL: str = os.environ.get("ENV_BASE_URL", "http://localhost:8000")
@@ -64,10 +85,13 @@ def _validate_env() -> None:
     if not API_KEY:
         key_var = "GROQ_API_KEY" if LLM_PROVIDER == "groq" else "HF_TOKEN"
         print(f"\n  ❌ ERROR: Missing API key for provider '{LLM_PROVIDER}'.")
-        print(f"     Please set {key_var} in your .env file.")
+        print(f"     Please export {key_var} in your shell environment.")
+        print(f"     Example:  export {key_var}=your_key_here")
         sys.exit(1)
     if not MODEL_NAME:
-        print("\n  ❌ ERROR: MODEL_NAME / GROQ_MODEL_NAME is not set.")
+        model_var = "GROQ_MODEL_NAME" if LLM_PROVIDER == "groq" else "MODEL_NAME"
+        print(f"\n  ❌ ERROR: {model_var} is not set.")
+        print(f"     Please export {model_var} in your shell environment.")
         sys.exit(1)
 
 
@@ -236,9 +260,9 @@ def log_step(step: int, action: str, reward: float, done: bool, error: Optional[
     done_val = str(done).lower()
     print(f"[STEP] step={step} action={action} reward={reward:.2f} done={done_val} error={error_val}", flush=True)
 
-def log_end(success: bool, steps: int, rewards: List[float]) -> None:
+def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    print(f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}", flush=True)
+    print(f"[END] success={str(success).lower()} steps={steps} score={score:.2f} rewards={rewards_str}", flush=True)
 
 
 def run_task(task_id: str) -> float:
@@ -319,7 +343,7 @@ def run_task(task_id: str) -> float:
     finally:
         # ALWAYS emit [END] — even on crash (hackathon requirement)
         success = score > 0.0
-        log_end(success=success, steps=steps_taken, rewards=rewards_list)
+        log_end(success=success, steps=steps_taken, score=score, rewards=rewards_list)
 
     return score
 
