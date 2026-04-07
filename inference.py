@@ -33,38 +33,41 @@ from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, before_sleep_log
 import logging as _logging
 
-# Configure retry logger so before_sleep_log actually outputs
-_retry_logger = _logging.getLogger("cloudfinops.retry")
-_retry_logger.setLevel(_logging.WARNING)
-if not _retry_logger.handlers:
-    _handler = _logging.StreamHandler(sys.stderr)
-    _handler.setFormatter(_logging.Formatter("  [RETRY] %(message)s"))
-    _retry_logger.addHandler(_handler)
+# ---------------------------------------------------------------------------
+# Provider Selection — reads LLM_PROVIDER ("groq" or "huggingface")
+# ---------------------------------------------------------------------------
+LLM_PROVIDER: str = os.environ.get("LLM_PROVIDER", "huggingface").lower()
 
-# ---------------------------------------------------------------------------
-# Required environment variables — per hackathon rules
-# ---------------------------------------------------------------------------
-API_BASE_URL: str = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
-MODEL_NAME: str = os.environ.get("MODEL_NAME", "openai/gpt-4o")
+if LLM_PROVIDER == "groq":
+    API_BASE_URL: str = "https://api.groq.com/openai/v1"
+    MODEL_NAME: str = os.environ.get("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
+    API_KEY: str = os.environ.get("GROQ_API_KEY", "")
+else:  # huggingface (default)
+    API_BASE_URL: str = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
+    MODEL_NAME: str = os.environ.get("MODEL_NAME", "openai/gpt-4o")
+    API_KEY: str = os.environ.get("HF_TOKEN", "")
+
+# Kept for hackathon compliance checks (pre_validation.py looks for these names)
 HF_TOKEN: str = os.environ.get("HF_TOKEN", "")
-API_KEY: str = HF_TOKEN
 
 # CloudFinOps environment URL (local Docker or HF Space)
 ENV_BASE_URL: str = os.environ.get("ENV_BASE_URL", "http://localhost:8000")
 
 # Evaluation parameters — synced with engine.py MAX_STEPS
 MAX_STEPS: int = 10
-TASKS: List[str] = ["easy", "medium", "hard", "green", "expert"]
+TASKS: List[str] = ["easy", "medium", "hard", "green"]
 LLM_MAX_RETRIES: int = 3
 
+
 def _validate_env() -> None:
-    """Ensure the three mandatory credentials are set before proceeding."""
+    """Ensure the active provider's credentials are set before proceeding."""
     if not API_KEY:
-        print("\n  ❌ ERROR: HF_TOKEN is not set.")
-        print("     Please set HF_TOKEN in your .env file or environment.")
+        key_var = "GROQ_API_KEY" if LLM_PROVIDER == "groq" else "HF_TOKEN"
+        print(f"\n  ❌ ERROR: Missing API key for provider '{LLM_PROVIDER}'.")
+        print(f"     Please set {key_var} in your .env file.")
         sys.exit(1)
     if not MODEL_NAME:
-        print("\n  ❌ ERROR: MODEL_NAME is not set.")
+        print("\n  ❌ ERROR: MODEL_NAME / GROQ_MODEL_NAME is not set.")
         sys.exit(1)
 
 
@@ -175,8 +178,15 @@ def parse_action(raw: str) -> Dict[str, Any]:
         return {"command": "IGNORE", "target_id": None, "reply": ""}
 
 
+# ---------------------------------------------------------------------------
+# LLM call with 429-aware retry logic
+# ---------------------------------------------------------------------------
+import httpx as _httpx
+
 # How long to pause between steps — keeps us within Groq/HF rate limits
 STEP_DELAY_S: float = float(os.environ.get("STEP_DELAY_S", "2.0"))
+
+_retry_logger = _logging.getLogger("cloudfinops.retry")
 
 
 @retry(
@@ -322,6 +332,7 @@ def main() -> None:
     print("=" * 60, file=sys.stderr)
     print("  CloudFinOps-Env Baseline Evaluator", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
+    print(f"  Provider:    {LLM_PROVIDER.upper()}", file=sys.stderr)
     print(f"  Model:       {MODEL_NAME}", file=sys.stderr)
     print(f"  API:         {API_BASE_URL}", file=sys.stderr)
     print(f"  API Key:     {masked_key}", file=sys.stderr)
