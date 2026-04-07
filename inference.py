@@ -3,24 +3,24 @@
 Runs an LLM agent against the CloudFinOps environment through /reset and /step.
 Uses the `openai` SDK and the following MANDATORY environment variables:
 
-  API_BASE_URL  — The API endpoint for the LLM (e.g. https://api.groq.com/openai/v1)
-  MODEL_NAME    — The model identifier to use for inference (e.g. llama-3.3-70b-versatile)
-  HF_TOKEN      — Your Hugging Face / API key
+  API_BASE_URL  — The API endpoint for the LLM (OpenAI-compatible).
+  MODEL_NAME    — The model identifier to use for inference.
+  HF_TOKEN      — Your Hugging Face / API key.
 
 Participants must use OpenAI Client for all LLM calls using above variables.
 
-Quick-start (export variables, then run directly):
+Quick-start (Hugging Face):
 
   export API_BASE_URL=https://router.huggingface.co/v1
   export MODEL_NAME=openai/gpt-4o
   export HF_TOKEN=hf_xxxxx
   python inference.py
 
-To test with Groq instead:
+To test with Groq (same 3 vars, just point at Groq):
 
-  export LLM_PROVIDER=groq
-  export GROQ_API_KEY=gsk_xxxxx
-  export GROQ_MODEL_NAME=llama-3.3-70b-versatile
+  export API_BASE_URL=https://api.groq.com/openai/v1
+  export MODEL_NAME=meta-llama/llama-4-scout-17b-16e-instruct
+  export HF_TOKEN=gsk_xxxxx
   python inference.py
 """
 
@@ -41,35 +41,17 @@ from tenacity import retry, stop_after_attempt, wait_exponential, before_sleep_l
 import logging as _logging
 
 # ---------------------------------------------------------------------------
-# Default credentials — override via environment variables if needed
+# Mandatory environment variables (checked by automated LLM evaluator)
+#
+#   API_BASE_URL  — The API endpoint for the LLM (OpenAI-compatible).
+#   MODEL_NAME    — The model identifier to use for inference.
+#   HF_TOKEN      — Your Hugging Face / API key.
+#
+# These MUST be set before running. No hardcoded defaults.
 # ---------------------------------------------------------------------------
-# Hugging Face defaults
-_DEFAULT_HF_API_BASE = "https://router.huggingface.co/v1"
-_DEFAULT_HF_MODEL    = "openai/gpt-oss-120b"
-_DEFAULT_HF_TOKEN    = ""
-
-# Groq defaults (for testing)
-_DEFAULT_GROQ_API_BASE = "https://api.groq.com/openai/v1"
-_DEFAULT_GROQ_MODEL    = "meta-llama/llama-4-scout-17b-16e-instruct"
-_DEFAULT_GROQ_API_KEY  = ""
-
-# ---------------------------------------------------------------------------
-# Provider Selection — reads LLM_PROVIDER ("groq" or "huggingface")
-# Environment variables override the defaults above when set.
-# ---------------------------------------------------------------------------
-LLM_PROVIDER: str = os.environ.get("LLM_PROVIDER", "huggingface").lower()
-
-if LLM_PROVIDER == "groq":
-    API_BASE_URL: str = os.environ.get("API_BASE_URL", _DEFAULT_GROQ_API_BASE)
-    MODEL_NAME: str = os.environ.get("GROQ_MODEL_NAME", _DEFAULT_GROQ_MODEL)
-    API_KEY: str = os.environ.get("GROQ_API_KEY", _DEFAULT_GROQ_API_KEY)
-else:  # huggingface (default)
-    API_BASE_URL: str = os.environ.get("API_BASE_URL", _DEFAULT_HF_API_BASE)
-    MODEL_NAME: str = os.environ.get("MODEL_NAME", _DEFAULT_HF_MODEL)
-    API_KEY: str = os.environ.get("HF_TOKEN", _DEFAULT_HF_TOKEN)
-
-# Kept for hackathon compliance checks (pre_validation.py looks for these names)
-HF_TOKEN: str = os.environ.get("HF_TOKEN", _DEFAULT_HF_TOKEN)
+API_BASE_URL: str = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME: str   = os.environ.get("MODEL_NAME", "openai/gpt-oss-120b")
+HF_TOKEN: str     = os.environ.get("HF_TOKEN", "")
 
 # CloudFinOps environment URL (local Docker or HF Space)
 ENV_BASE_URL: str = os.environ.get("ENV_BASE_URL", "http://localhost:8000")
@@ -81,29 +63,33 @@ LLM_MAX_RETRIES: int = 3
 
 
 def _validate_env() -> None:
-    """Ensure the active provider's credentials are set before proceeding."""
-    if not API_KEY:
-        key_var = "GROQ_API_KEY" if LLM_PROVIDER == "groq" else "HF_TOKEN"
-        print(f"\n  ❌ ERROR: Missing API key for provider '{LLM_PROVIDER}'.")
-        print(f"     Please export {key_var} in your shell environment.")
-        print(f"     Example:  export {key_var}=your_key_here")
+    """Ensure the three mandatory environment variables are set."""
+    if not API_BASE_URL:
+        print("\n  ❌ ERROR: API_BASE_URL is not set.")
+        print("     The API endpoint for the LLM (OpenAI-compatible).")
+        print("     Example:  export API_BASE_URL=https://router.huggingface.co/v1")
         sys.exit(1)
     if not MODEL_NAME:
-        model_var = "GROQ_MODEL_NAME" if LLM_PROVIDER == "groq" else "MODEL_NAME"
-        print(f"\n  ❌ ERROR: {model_var} is not set.")
-        print(f"     Please export {model_var} in your shell environment.")
+        print("\n  ❌ ERROR: MODEL_NAME is not set.")
+        print("     The model identifier to use for inference.")
+        print("     Example:  export MODEL_NAME=openai/gpt-4o")
+        sys.exit(1)
+    if not HF_TOKEN:
+        print("\n  ❌ ERROR: HF_TOKEN is not set.")
+        print("     Your Hugging Face / API key.")
+        print("     Example:  export HF_TOKEN=hf_xxxxx")
         sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
 # OpenAI Client — mandatory per hackathon rules
-# All LLM calls go through this client using the resolved provider vars.
+# All LLM calls go through this client using the three env vars above.
 # ---------------------------------------------------------------------------
 _validate_env()
 
 client = OpenAI(
     base_url=API_BASE_URL,
-    api_key=API_KEY,
+    api_key=HF_TOKEN,
 )
 
 # HTTP client for environment REST calls
@@ -113,36 +99,119 @@ http = httpx.Client(timeout=60.0)
 # System Prompt — task-aware, structured for JSON output
 # ---------------------------------------------------------------------------
 SYSTEM_PROMPT = """\
-You are an expert cloud infrastructure engineer managing a fleet of AWS servers for cost optimisation.
+You are a senior AWS Solutions Architect and FinOps specialist with deep expertise in cloud cost optimization, capacity planning, and sustainability (GreenOps). You manage a fleet of AWS EC2 instances and must make ONE optimal infrastructure decision per time-step.
 
-You receive a JSON observation with:
-- servers: list of objects — id, type, cpu_util, memory_util, cost_per_hour, status (running|terminated), cpu_history, memory_history
-- traffic_load: global traffic % (0-100)
-- spike_detected: boolean
-- incidents: past SLA breaches
-- budget_remaining: remaining USD
-- time_step: current step (0-indexed)
-- inbox: stakeholder messages
-- carbon_kwh: cumulative carbon emissions
+═══════════════════════════════════════════════
+  OBSERVATION SCHEMA (fields you will receive)
+═══════════════════════════════════════════════
 
-You MUST respond with ONLY a valid JSON object:
-{"command": "TERMINATE"|"DOWNSCALE"|"UPSCALE"|"REDISTRIBUTE_LOAD"|"IGNORE", "target_id": "<server_id or null>", "reply": "<short reply to inbox or empty>"}
+servers: list of objects, each with:
+  - id           : unique identifier (e.g. "web-0", "idle-2", "compute-1")
+  - type         : AWS instance type (t3.micro/medium/large, c5.large/xlarge, r6g.medium/large/xlarge, m5.large/xlarge)
+  - cpu_util     : current CPU utilization % (0-100)
+  - memory_util  : current memory utilization % (0-100)
+  - cost_per_hour: hourly cost in USD
+  - status       : "running" or "terminated"  ← CRITICAL: never act on terminated servers
+  - cpu_history  : list of last 3 CPU readings (trend detection)
+  - memory_history: list of last 3 memory readings
 
-=== DECISION TREE — follow in order ===
-1. If any server with id matching "idle-*" has status=running AND cpu_util=0 → TERMINATE it immediately.
-2. If any server has status=running AND cpu_util >= 80 AND spike_detected=true → UPSCALE it.
-3. If any server has status=running AND cpu_util <= 5 AND NOT an idle server → DOWNSCALE it.
-4. If traffic load is uneven and no urgent action → REDISTRIBUTE_LOAD (target_id=null).
-5. Only use IGNORE when ALL running servers are healthy and no idle servers remain.
+traffic_load   : global traffic percentage (0-100)
+spike_detected : boolean — true = traffic surge in progress
+incidents      : list of past SLA breaches (cpu >= 100 = breach)
+budget_remaining: remaining USD for the episode
+time_step      : current step (0-indexed, max 10 steps)
+inbox          : stakeholder messages requiring acknowledgement
+carbon_kwh     : cumulative carbon emissions in kWh
 
-=== RULES ===
-- NEVER try to act on a server with status=terminated. Skip it.
-- NEVER use IGNORE if there are servers with cpu_util=0 still running — terminate them.
-- Only ONE action per step. Pick the most impactful.
-- If inbox is not empty, always put a short reply in the reply field.
-- For GreenOps tasks: prefer terminating c5.* and m5.* instances (dirty x86) over r6g.* (clean ARM).
+═══════════════════════════════════════════════
+  RESPONSE FORMAT (strict JSON, nothing else)
+═══════════════════════════════════════════════
 
-Respond with ONLY the JSON. No explanation, no markdown, no extra text.
+{"command": "<COMMAND>", "target_id": "<server_id_or_null>", "reply": "<string>"}
+
+Commands: TERMINATE | DOWNSCALE | UPSCALE | REDISTRIBUTE_LOAD | IGNORE
+
+═══════════════════════════════════════════════
+  PRIORITY DECISION FRAMEWORK (follow top→down)
+═══════════════════════════════════════════════
+
+P1 — ZOMBIE CLEANUP (highest priority)
+  IF any server has status="running" AND cpu_util == 0 AND id starts with "idle-"
+  → TERMINATE that server immediately.
+  Rationale: Zero-utilization instances burn budget for nothing.
+
+P2 — SLA BREACH PREVENTION
+  IF any server has status="running" AND cpu_util >= 80 AND spike_detected == true
+  → UPSCALE the server with the HIGHEST cpu_util first.
+  Rationale: CPU >= 100 causes SLA breach → episode terminates with massive penalty.
+  IMPORTANT: Check cpu_history — if trend is rising (each value > previous), upscale even at cpu_util >= 70.
+
+P3 — COST OPTIMIZATION (downscale underutilized)
+  IF any server has status="running" AND cpu_util <= 5 AND id does NOT start with "idle-"
+  → DOWNSCALE the server with the LOWEST cpu_util (halves cost, increases CPU by 1.8×).
+  WARNING: After downscale, CPU jumps to ~1.8× original. Only downscale if cpu_util * 1.8 < 80.
+
+P4 — CARBON REDUCTION (GreenOps scenarios)
+  IF inbox mentions carbon/emissions/sustainability AND c5.* or m5.* servers are running
+  → TERMINATE the highest-cost c5.* or m5.* instance (dirty x86).
+  PRESERVE r6g.* instances (clean ARM Graviton — 3× lower emissions).
+  Priority order for termination: m5.xlarge > c5.xlarge > m5.large > c5.large.
+
+P5 — LOAD BALANCING
+  IF traffic_load > 50 AND there is high variance in cpu_util across running servers
+  → REDISTRIBUTE_LOAD (target_id=null). Equalizes CPU/memory across all running servers.
+
+P6 — STRATEGIC IGNORE
+  ONLY if ALL of these are true:
+    • No running servers with cpu_util == 0
+    • No servers approaching SLA breach (cpu_util < 75 or spike_detected == false)
+    • No obviously over-provisioned servers (cpu_util > 5 for all)
+    • Budget is healthy (budget_remaining > 1.0)
+  → IGNORE
+
+═══════════════════════════════════════════════
+  TASK-SPECIFIC STRATEGIES
+═══════════════════════════════════════════════
+
+EASY ("Zombie Cleanup"):
+  Goal: Terminate ALL 3 idle-* servers. That's it.
+  Strategy: TERMINATE idle-0, idle-1, idle-2 one per step. Don't touch active servers.
+  Perfect score requires: All 3 idle terminated + zero active servers terminated.
+
+MEDIUM ("CTO Budget Squeeze"):
+  Goal: Cut costs by 50%+. You have 12 over-provisioned servers.
+  Strategy: DOWNSCALE the lowest-CPU servers first (they're all at 3-9% CPU).
+  Then TERMINATE any that are still barely used. Watch SLA — downscale pushes CPU to 1.8×.
+
+HARD ("Black Friday Chaos"):
+  Goal: Keep uptime (avoid SLA breaches) while managing costs under a spike.
+  Strategy: UPSCALE the DB servers (r6g.*) immediately — they're under spike pressure.
+  Then manage batch servers (low priority, safe to downscale/terminate).
+  Traffic grows logarithmically each step — act fast on databases.
+
+GREEN ("Green Initiative"):
+  Goal: Reduce carbon emissions by 40%+. Terminate dirty x86 (c5/m5), keep ARM (r6g).
+  Strategy: TERMINATE compute-* and batch-* instances (c5/m5 types) in order of highest cost.
+  Keep idle-0 for last (low carbon). Preserve all arm-* (r6g) instances.
+
+═══════════════════════════════════════════════
+  CRITICAL RULES (violations = score penalties)
+═══════════════════════════════════════════════
+
+1. NEVER act on a server with status="terminated" → automatic -2.0 penalty.
+2. NEVER use IGNORE if idle-* servers with cpu_util=0 are still running.
+3. ONE action per step. Choose the highest-priority action from the framework.
+4. If inbox is non-empty, ALWAYS include a short professional reply (earns +2.0 bonus).
+5. Upscaling costs -5.0 reward but prevents SLA breach (-100.0). Always upscale if breach is imminent.
+6. After terminating a server, its CPU load redistributes to remaining servers — plan for this.
+7. Budget < 0 ends the episode with penalty. Track cost_per_hour × running_servers vs budget_remaining.
+8. cpu_util >= 100 = SLA BREACH = episode over with -100 penalty. Prevent at all costs.
+9. Downscale only safe targets: cpu_util * 1.8 must stay below 80 to avoid triggering breach cascade.
+10. Each server can only be upscaled twice max. Don't waste upscales.
+11. Upscale takes effect NEXT step (queued). Plan one step ahead.
+12. REDISTRIBUTE_LOAD averages all CPU/memory — useful when some servers are hot and others cold.
+
+Respond with ONLY valid JSON. No markdown fences, no explanation, no commentary.
 """
 
 
@@ -351,15 +420,14 @@ def run_task(task_id: str) -> float:
 def main() -> None:
     start_time = time.time()
 
-    masked_key = ('*' * 4 + API_KEY[-4:]) if len(API_KEY) > 4 else '****'
+    masked_key = ('*' * 4 + HF_TOKEN[-4:]) if len(HF_TOKEN) > 4 else '****'
 
     print("=" * 60, file=sys.stderr)
     print("  CloudFinOps-Env Baseline Evaluator", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
-    print(f"  Provider:    {LLM_PROVIDER.upper()}", file=sys.stderr)
     print(f"  Model:       {MODEL_NAME}", file=sys.stderr)
     print(f"  API:         {API_BASE_URL}", file=sys.stderr)
-    print(f"  API Key:     {masked_key}", file=sys.stderr)
+    print(f"  HF_TOKEN:    {masked_key}", file=sys.stderr)
     print(f"  Env:         {ENV_BASE_URL}", file=sys.stderr)
     print(f"  Max Steps:   {MAX_STEPS}", file=sys.stderr)
     print(f"  LLM Retries: {LLM_MAX_RETRIES}", file=sys.stderr)

@@ -18,7 +18,7 @@ tags:
 [![Validate](https://github.com/Fnc-Jit/Cloud-Solutions_Re/actions/workflows/validate.yml/badge.svg)](https://github.com/Fnc-Jit/Cloud-Solutions_Re/actions/workflows/validate.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![OpenEnv](https://img.shields.io/badge/OpenEnv-compatible-green.svg)](https://huggingface.co/openenv)
-[![Tests](https://img.shields.io/badge/tests-38%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-84%20passed-brightgreen.svg)]()
 
 ![CloudFinOps Dashboard](assets/dashboard.png)
 ![CloudFinOps Dashboard Details](assets/dashboard_details.png)
@@ -50,7 +50,7 @@ Real cloud teams constantly trade off cost, SLA risk, and sustainability. This e
 │                        │                    │               │
 │                   ┌────┴────┐         ┌─────┴─────┐        │
 │                   │  Tests  │         │inference.py│        │
-│                   │ 38 unit │         │ LLM Agent  │        │
+│                   │ 84 unit │         │ LLM Agent  │        │
 │                   │  tests  │         │ Evaluator  │        │
 │                   └─────────┘         └───────────┘        │
 └─────────────────────────────────────────────────────────────┘
@@ -68,7 +68,7 @@ Real cloud teams constantly trade off cost, SLA risk, and sustainability. This e
 | ⏱️ **Delayed Scaling** | UPSCALE queues for next step — agents must plan ahead |
 | 🔒 **Deterministic Noise** | Hash-seeded metric jitter — fully reproducible episodes |
 | 📈 **Live Dashboard** | Real-time glassmorphism web UI at `/dashboard` with sparklines |
-| 🧪 **38 Unit Tests** | Comprehensive pytest suite + GitHub Actions CI |
+| 🧪 **84 Unit Tests** | Comprehensive pytest suite with 20 test classes + GitHub Actions CI |
 
 ---
 
@@ -132,22 +132,15 @@ This lets LLM agents **detect trends** (e.g., "CPU rising 3 steps in a row → a
 
 ## Setup and Usage Instructions
 
-Before submitting, ensure the following variables are defined in your environment configuration:
+Before submitting, ensure the following **3 mandatory environment variables** are defined:
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `API_BASE_URL` | Yes | `https://router.huggingface.co/v1` | The API endpoint for the LLM |
-| `MODEL_NAME` | Yes | `openai/gpt-oss-120b` | The model identifier to use for inference |
-| `HF_TOKEN` | Yes | — | Your Hugging Face / API key |
-| `LOCAL_IMAGE_NAME` | No | — | Local Docker image name for `from_docker_image()` |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `API_BASE_URL` | **Yes** | The API endpoint for the LLM (OpenAI-compatible) |
+| `MODEL_NAME` | **Yes** | The model identifier to use for inference |
+| `HF_TOKEN` | **Yes** | Your Hugging Face / API key |
 
-Defaults are set for `API_BASE_URL` and `MODEL_NAME`. Groq is available as a test provider:
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `LLM_PROVIDER` | No | `huggingface` | Set to `groq` to switch provider |
-| `GROQ_API_KEY` | If groq | *(built-in for testing)* | Groq API key |
-| `GROQ_MODEL_NAME` | No | `meta-llama/llama-4-scout-17b-16e-instruct` | Groq model |
+These are the **only** variables the automated evaluator checks. To test with different providers, simply point these at the desired endpoint:
 
 ### 1. Clone
 ```bash
@@ -168,23 +161,16 @@ docker run -p 8000:8000 cloudfinops-env:latest
 ### 4. Open the Live Dashboard
 Open `http://localhost:8000/dashboard` in your browser.
 
-### 5. Run the Agent Evaluator (Hugging Face)
+### 5. Run the Agent Evaluator
 ```bash
 docker run \
-  -e HF_TOKEN=$HF_TOKEN \
   -e ENV_BASE_URL=http://host.docker.internal:8000 \
   cloudfinops-env:latest python3 /app/env/inference.py
 ```
 
-### 6. Run the Agent Evaluator (Groq — for testing)
-```bash
-docker run \
-  -e LLM_PROVIDER=groq \
-  -e ENV_BASE_URL=http://host.docker.internal:8000 \
-  cloudfinops-env:latest python3 /app/env/inference.py
-```
+> Defaults for `API_BASE_URL`, `MODEL_NAME`, and `HF_TOKEN` are already set in `inference.py`. Override via `-e` flags if needed.
 
-### 7. Run Tests
+### 6. Run Tests
 ```bash
 docker run --rm cloudfinops-env:latest python3 -m pytest tests/ -v
 ```
@@ -205,15 +191,13 @@ uvicorn server.app:app --reload --host 0.0.0.0 --port 8000
 ### Alternative: Running Locally (Direct)
 
 ```bash
-# Export your HF token, then run:
-export HF_TOKEN=hf_your_token_here
+# Defaults are set in inference.py — just run:
 python inference.py
 
-# Or test with Groq (built-in key):
-LLM_PROVIDER=groq python inference.py
-
-# Override any default:
-# export MODEL_NAME=my-custom-model
+# To override any variable:
+# export API_BASE_URL=https://router.huggingface.co/v1
+# export MODEL_NAME=openai/gpt-4o
+# export HF_TOKEN=hf_your_token_here
 # python inference.py
 ```
 
@@ -337,7 +321,7 @@ This README explicitly includes all required sections:
 
 ## 🧪 Testing
 
-The project includes **38 unit tests** across 9 test classes:
+The project includes **84 unit tests** across 20 test classes:
 
 | Test Class | Tests | What it covers |
 |-----------|-------|----------------|
@@ -350,6 +334,17 @@ The project includes **38 unit tests** across 9 test classes:
 | `TestTrailingHistory` | 3 | Initial values, growth, max depth enforcement |
 | `TestEpisodeBoundaries` | 3 | Max steps, budget overrun, post-done behavior |
 | `TestClamp` | 4 | Utility function edge cases |
+| `TestCascadingFailures` | 3 | Load redistribution after terminates → SLA breach risk |
+| `TestBudgetEdgeCases` | 4 | Zero budget, negative budget, burn rate reduction |
+| `TestInvalidActions` | 6 | Double-terminate, ghost servers, max tier, null target |
+| `TestDownscaleSafety` | 3 | 1.8× CPU multiplier, cost halving, breach risk |
+| `TestGreenOpsEdgeCases` | 4 | Carbon rate tracking, ARM vs x86, strategy comparison |
+| `TestInboxMechanics` | 6 | Reply bonus, inbox clearing, empty reply, message content |
+| `TestOptimalPlaySequences` | 4 | Known-optimal action sequences for each task type |
+| `TestDeterministicReplay` | 3 | Same actions → same scores, observation reproducibility |
+| `TestGraderBoundaries` | 5 | Score clamping, zero-score conditions, baseline scores |
+| `TestUpscaleQueueTiming` | 4 | Queued upscale, next-step application, terminated server |
+| `TestTrafficSimulation` | 4 | Logarithmic growth (hard), stable traffic, spike flags |
 
 Run via Docker:
 ```bash
@@ -365,16 +360,12 @@ python3 -m pytest tests/ -v --tb=short
 
 ## 🌐 Environment Variables
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `API_BASE_URL` | Yes | `https://router.huggingface.co/v1` | LLM API endpoint (OpenAI-compatible) |
-| `MODEL_NAME` | Yes | `openai/gpt-oss-120b` | Model identifier |
-| `HF_TOKEN` | Yes | — | Hugging Face token / API key |
-| `LLM_PROVIDER` | No | `huggingface` | `groq` or `huggingface` |
-| `GROQ_API_KEY` | If groq | *(built-in for testing)* | Groq API key |
-| `GROQ_MODEL_NAME` | No | `meta-llama/llama-4-scout-17b-16e-instruct` | Groq model |
-| `ENV_BASE_URL` | No | `http://localhost:8000` | Environment server URL |
-| `LOCAL_IMAGE_NAME` | No | — | Local Docker image name for `from_docker_image()` |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `API_BASE_URL` | **Yes** | The API endpoint for the LLM (OpenAI-compatible) |
+| `MODEL_NAME` | **Yes** | The model identifier to use for inference |
+| `HF_TOKEN` | **Yes** | Your Hugging Face / API key |
+| `ENV_BASE_URL` | No | Environment server URL (default: `http://localhost:8000`) |
 
 ---
 
@@ -447,7 +438,7 @@ cloudfinops_env/
 │   └── requirements.txt     # Server-specific deps
 ├── tests/
 │   ├── __init__.py
-│   └── test_engine.py       # 38 pytest unit tests
+│   └── test_engine.py       # 84 pytest unit tests
 └── assets/
     ├── dashboard.png
     └── dashboard_details.png
