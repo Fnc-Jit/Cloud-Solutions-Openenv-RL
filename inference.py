@@ -12,7 +12,7 @@ Participants must use OpenAI Client for all LLM calls using above variables.
 Quick-start (Hugging Face):
 
   export API_BASE_URL=https://router.huggingface.co/v1
-  export MODEL_NAME=openai/gpt-4o
+  export MODEL_NAME=openai/gpt-oss-120b
   export HF_TOKEN=hf_xxxxx
   python inference.py
 
