@@ -85,10 +85,13 @@ def _clamp(val: float, lo: float = 0.0, hi: float = 100.0) -> float:
 
 
 # Epsilon to keep grader scores strictly inside (0, 1) — required by hackathon validator
-_SCORE_EPS = 0.001
+_SCORE_EPS = 0.01
 
 def _clamp_score(val: float) -> float:
-    """Clamp a grader score to the open interval (0, 1), exclusive of both endpoints."""
+    """Clamp a grader score to the open interval (0, 1), exclusive of both endpoints.
+
+    Uses 0.01 margin so that even :.2f formatting never rounds to 0.00 or 1.00.
+    """
     return max(_SCORE_EPS, min(1.0 - _SCORE_EPS, val))
 
 

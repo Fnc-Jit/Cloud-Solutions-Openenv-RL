@@ -189,7 +189,7 @@ class TestGrading:
         engine.step(CloudFinOpsAction(command="TERMINATE", target_id="idle-1"))
         engine.step(CloudFinOpsAction(command="TERMINATE", target_id="idle-2"))
         score = engine.grade()
-        assert score >= 0.999  # clamped to max 0.999
+        assert score >= 0.99  # clamped to max 0.99
 
     def test_easy_partial_score(self, engine):
         engine.reset("easy")
@@ -648,7 +648,7 @@ class TestOptimalPlaySequences:
         engine.step(CloudFinOpsAction(command="TERMINATE", target_id="idle-1"))
         engine.step(CloudFinOpsAction(command="TERMINATE", target_id="idle-2"))
         score = engine.grade()
-        assert score >= 0.999  # clamped to max 0.999
+        assert score >= 0.99  # clamped to max 0.99
 
     def test_easy_terminating_active_reduces_score(self, engine):
         """Easy: terminating active servers should reduce score."""
@@ -770,7 +770,7 @@ class TestGraderBoundaries:
         engine.step(CloudFinOpsAction(command="TERMINATE", target_id="web-2"))
         engine.step(CloudFinOpsAction(command="TERMINATE", target_id="web-3"))
         score = engine.grade()
-        assert score <= 0.001  # clamped to min 0.001
+        assert score <= 0.01  # clamped to min 0.01
 
     def test_medium_no_savings_low_score(self, engine):
         """Medium: doing nothing should yield low/zero score (no cost savings)."""

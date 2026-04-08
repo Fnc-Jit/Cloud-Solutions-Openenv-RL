@@ -62,8 +62,9 @@ TASKS: List[str] = ["easy", "medium", "hard", "green"]
 LLM_MAX_RETRIES: int = 3
 
 # Hackathon validator requires scores strictly in (0, 1) — not 0.0 or 1.0
-_SCORE_EPS = 0.001
+_SCORE_EPS = 0.01
 def _clamp_score(val: float) -> float:
+    """Clamp to (0, 1) open interval. Use 0.01 margin so :.2f never rounds to 0.00 or 1.00."""
     return max(_SCORE_EPS, min(1.0 - _SCORE_EPS, val))
 
 
@@ -385,7 +386,7 @@ def log_step(step: int, action: str, reward: float, done: bool, error: Optional[
 
 def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    print(f"[END] success={str(success).lower()} steps={steps} score={score:.2f} rewards={rewards_str}", flush=True)
+    print(f"[END] success={str(success).lower()} steps={steps} score={score:.4f} rewards={rewards_str}", flush=True)
 
 
 def run_task(task_id: str) -> float:
