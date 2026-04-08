@@ -287,6 +287,15 @@ class TestEpisodeBoundaries:
             obs, reward, done, info = engine.step(CloudFinOpsAction(command="IGNORE"))
         assert done is True
         assert "grader_score" in info
+        assert "score_breakdown" in info
+        assert "reward_breakdown" in info
+        breakdown = info["score_breakdown"]
+        assert 0.0 < breakdown["final_score"] < 1.0
+        assert "cost" in breakdown
+        assert "sla" in breakdown
+        assert "carbon" in breakdown
+        assert "inbox_reply_bonus" in breakdown
+        assert "penalties" in breakdown
 
     def test_budget_overrun_ends_episode(self, engine):
         engine.reset("easy")

@@ -263,6 +263,8 @@ class CloudFinOpsEngine:
         self.initial_carbon_rate: float = 0.0
         self._cpu_history: Dict[str, List[float]] = {}
         self._mem_history: Dict[str, List[float]] = {}
+        self._reward_penalties: Dict[str, float] = {}
+        self._reward_bonuses: Dict[str, float] = {}
 
     def reset(self, task_id: str) -> CloudFinOpsObservation:
         cfg = TASK_CONFIGS.get(task_id)
@@ -293,6 +295,8 @@ class CloudFinOpsEngine:
         )
         self._cpu_history = {s.id: [s.cpu_util] for s in self.servers}
         self._mem_history = {s.id: [s.memory_util] for s in self.servers}
+        self._reward_penalties = {}
+        self._reward_bonuses = {}
         return self._obs()
 
     def step(self, action: CloudFinOpsAction) -> Tuple[CloudFinOpsObservation, float, bool, Dict[str, Any]]:
@@ -331,22 +335,33 @@ class CloudFinOpsEngine:
                     "step": self.time_step,
                 })
                 reward -= 100.0
+                self._add_penalty("sla_breach", 100.0)
 
         if step_cost > 0.50:
             reward -= 1.0
+            self._add_penalty("high_runtime_cost", 1.0)
 
         if self.budget_remaining < 0:
             reward -= 20.0
+            self._add_penalty("budget_overrun", 20.0)
 
         if self.time_step >= MAX_STEPS or self.sla_breached or self.budget_remaining <= 0:
             self.done = True
 
         self._reward_accum += reward
 
-        info: Dict[str, Any] = {"step_reward": reward, "cumulative_reward": self._reward_accum}
+        info: Dict[str, Any] = {
+            "step_reward": reward,
+            "cumulative_reward": self._reward_accum,
+            "reward_breakdown": {
+                "penalties": copy.deepcopy(self._reward_penalties),
+                "bonuses": copy.deepcopy(self._reward_bonuses),
+            },
+        }
         if self.done:
             final_score = self.grade()
             info["grader_score"] = final_score
+            info["score_breakdown"] = self._build_score_breakdown(final_score)
 
         return self._obs(), reward, self.done, info
 
@@ -366,6 +381,147 @@ class CloudFinOpsEngine:
             raw = 0.0
         # Hackathon validator requires scores strictly in (0, 1)
         return _clamp_score(raw)
+
+    def _add_penalty(self, key: str, value: float) -> None:
+        self._reward_penalties[key] = round(self._reward_penalties.get(key, 0.0) + value, 4)
+
+    def _add_bonus(self, key: str, value: float) -> None:
+        self._reward_bonuses[key] = round(self._reward_bonuses.get(key, 0.0) + value, 4)
+
+    def _build_score_breakdown(self, final_score: float) -> Dict[str, Any]:
+        cost_saved_pct = 1.0 - (self.total_cost_spent / self.initial_budget) if self.initial_budget > 0 else 0.0
+        cost_efficiency = _clamp(cost_saved_pct, 0.0, 1.0)
+        current_carbon_rate = sum(
+            CARBON_INTENSITY.get(s.type, 0.01)
+            for s in self.servers if s.status == "running"
+        )
+        carbon_reduction_pct = 0.0
+        if self.initial_carbon_rate > 0:
+            carbon_reduction_pct = 1.0 - (current_carbon_rate / self.initial_carbon_rate)
+
+        raw_score = 0.0
+        cost_weight = 0.0
+        cost_contribution = 0.0
+        sla_weight = 0.0
+        sla_contribution = 0.0
+        carbon_weight = 0.0
+        carbon_contribution = 0.0
+        uptime_score = 0.0
+        carbon_score = 0.0
+        inbox_bonus = 0.0
+
+        grading_penalties: Dict[str, float] = {
+            "active_termination": 0.0,
+            "sla_crash_penalty": 0.0,
+        }
+        task_metrics: Dict[str, Any] = {}
+
+        if self.task_id == "easy":
+            idle_ids = {f"idle-{i}" for i in range(3)}
+            terminated_idle = len(idle_ids & set(self.terminated_ids))
+            active_terminated = len(set(self.terminated_ids) - idle_ids)
+            score = (terminated_idle / 3.0) - (active_terminated * 0.25)
+            if self.sla_breached:
+                score -= 0.5
+                grading_penalties["sla_crash_penalty"] = 0.5
+            grading_penalties["active_termination"] = round(active_terminated * 0.25, 4)
+            raw_score = _clamp(score, 0.0, 1.0)
+            task_metrics = {
+                "terminated_idle": terminated_idle,
+                "terminated_active": active_terminated,
+                "target_idle_terminations": 3,
+            }
+
+        elif self.task_id == "medium":
+            target = 0.50
+            efficiency = min(cost_saved_pct / target, 1.0) if target > 0 else 0.0
+            crash_penalty = 0.5 if self.sla_breached else 0.0
+            grading_penalties["sla_crash_penalty"] = crash_penalty
+            raw_score = _clamp(efficiency - crash_penalty, 0.0, 1.0)
+            cost_weight = 1.0
+            cost_contribution = efficiency
+            task_metrics = {
+                "target_cost_reduction_pct": target,
+                "efficiency_score": round(efficiency, 4),
+            }
+
+        elif self.task_id == "hard":
+            uptime_score = 0.0 if self.sla_breached else 1.0
+            base = uptime_score * 0.6 + cost_efficiency * 0.4
+            inbox_bonus = 0.1 if not self.inbox else 0.0
+            raw_score = round(_clamp(base + inbox_bonus, 0.0, 1.0), 4)
+            sla_weight = 0.6
+            sla_contribution = uptime_score * sla_weight
+            cost_weight = 0.4
+            cost_contribution = cost_efficiency * cost_weight
+
+        elif self.task_id == "green":
+            target = 0.40
+            carbon_score = min(carbon_reduction_pct / target, 1.0) if target > 0 else 0.0
+            uptime_score = 0.0 if self.sla_breached else 1.0
+            inbox_bonus = 0.1 if not self.inbox else 0.0
+            carbon_weight = 0.5
+            carbon_contribution = carbon_score * carbon_weight
+            sla_weight = 0.3
+            sla_contribution = uptime_score * sla_weight
+            cost_weight = 0.1
+            cost_contribution = cost_efficiency * cost_weight
+            raw_score = round(
+                _clamp(carbon_contribution + sla_contribution + cost_contribution + inbox_bonus, 0.0, 1.0),
+                4,
+            )
+            task_metrics = {
+                "target_carbon_reduction_pct": target,
+            }
+
+        else:
+            raw_score = 0.0
+
+        return {
+            "task_id": self.task_id,
+            "raw_score": round(raw_score, 4),
+            "final_score": round(final_score, 4),
+            "score_bounds": {
+                "min_exclusive": _SCORE_EPS,
+                "max_exclusive": 1.0 - _SCORE_EPS,
+                "was_clamped": abs(final_score - raw_score) > 1e-12,
+            },
+            "cost": {
+                "initial_budget": round(self.initial_budget, 4),
+                "remaining_budget": round(self.budget_remaining, 4),
+                "total_spent": round(self.total_cost_spent, 4),
+                "saved_pct": round(cost_saved_pct, 4),
+                "efficiency_score": round(cost_efficiency, 4),
+                "weight": round(cost_weight, 4),
+                "contribution": round(cost_contribution, 4),
+            },
+            "sla": {
+                "breached": self.sla_breached,
+                "uptime_score": round(uptime_score, 4),
+                "weight": round(sla_weight, 4),
+                "contribution": round(sla_contribution, 4),
+                "incident_count": len(self.incidents),
+            },
+            "carbon": {
+                "initial_rate": round(self.initial_carbon_rate, 4),
+                "current_rate": round(current_carbon_rate, 4),
+                "reduction_pct": round(carbon_reduction_pct, 4),
+                "target_reduction_pct": 0.4,
+                "carbon_score": round(carbon_score, 4),
+                "weight": round(carbon_weight, 4),
+                "contribution": round(carbon_contribution, 4),
+            },
+            "inbox_reply_bonus": {
+                "applied": inbox_bonus > 0.0,
+                "value": round(inbox_bonus, 4),
+            },
+            "penalties": {
+                "grading": grading_penalties,
+                "reward_penalties": copy.deepcopy(self._reward_penalties),
+                "reward_bonuses": copy.deepcopy(self._reward_bonuses),
+            },
+            "task_metrics": task_metrics,
+        }
 
     def _grade_easy(self) -> float:
         idle_ids = {f"idle-{i}" for i in range(3)}
@@ -445,9 +601,11 @@ class CloudFinOpsEngine:
             return 0.0
 
         if server is None:
+            self._add_penalty("invalid_target", 2.0)
             return -2.0
 
         if server.status == "terminated":
+            self._add_penalty("target_already_terminated", 2.0)
             return -2.0
 
         if action.command == "TERMINATE":
@@ -456,26 +614,31 @@ class CloudFinOpsEngine:
             server.memory_util = 0.0
             self.terminated_ids.append(server.id)
             reward += 10.0
+            self._add_bonus("terminate_action", 10.0)
 
         elif action.command == "UPSCALE":
             next_type = UPSCALE_PATH.get(server.type)
             if next_type is None:
                 reward -= 1.0
+                self._add_penalty("upscale_no_path", 1.0)
             else:
                 count = self.upscale_counts.get(server.id, 0)
                 if count >= 2:
                     reward -= 1.0
+                    self._add_penalty("upscale_limit_reached", 1.0)
                 else:
                     self.pending_scales[server.id] = next_type
                     self.upscaled_ids.append(server.id)
                     self.upscale_counts[server.id] = count + 1
                     reward -= 5.0
+                    self._add_penalty("upscale_action_cost", 5.0)
 
         elif action.command == "DOWNSCALE":
             server.cost_per_hour = round(server.cost_per_hour * 0.5, 4)
             server.cpu_util = _clamp(server.cpu_util * 1.8)
             server.memory_util = _clamp(server.memory_util * 1.3)
             reward += 5.0
+            self._add_bonus("downscale_action", 5.0)
 
         elif action.command == "REDISTRIBUTE_LOAD":
             running = [s for s in self.servers if s.status == "running"]
@@ -486,10 +649,12 @@ class CloudFinOpsEngine:
                     s.cpu_util = round(_clamp(avg_cpu), 1)
                     s.memory_util = round(_clamp(avg_mem), 1)
                 reward += 3.0
+                self._add_bonus("redistribute_load", 3.0)
 
         if action.reply and self.inbox:
             reward += 2.0
             self.inbox = []
+            self._add_bonus("inbox_reply", 2.0)
 
         return reward
 

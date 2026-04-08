@@ -68,6 +68,7 @@ Real cloud teams constantly trade off cost, SLA risk, and sustainability. This e
 | ⏱️ **Delayed Scaling** | UPSCALE queues for next step — agents must plan ahead |
 | 🔒 **Deterministic Noise** | Hash-seeded metric jitter — fully reproducible episodes |
 | 📈 **Live Dashboard** | Real-time glassmorphism web UI at `/dashboard` with sparklines |
+| 🔎 **Explainable Scoring** | Per-step `reward_breakdown` + final `score_breakdown` for transparent judge-facing evaluation (see [Explainable Scoring Output](#-explainable-scoring-output)) |
 | 🧠 **LLM Conversational Memory** | Multi-turn conversation history so the agent remembers previous actions and avoids repeating mistakes |
 | 🧪 **84 Unit Tests** | Comprehensive pytest suite with 20 test classes + GitHub Actions CI |
 
@@ -142,6 +143,8 @@ Before submitting, ensure the following **3 mandatory environment variables** ar
 | `HF_TOKEN` | **Yes** | Your Hugging Face / API key |
 
 These are the **only** variables the automated evaluator checks. To test with different providers, simply point these at the desired endpoint:
+
+> **Recommended baseline model for this environment:** `openai/gpt-oss-120b` (via Hugging Face Router).
 
 ### 1. Clone
 ```bash
@@ -292,6 +295,71 @@ Each server includes:
 - `id`, `type`, `cpu_util`, `memory_util`, `cost_per_hour`, `status`
 - `cpu_history`: last 3 CPU values
 - `memory_history`: last 3 memory values
+
+---
+
+## 🔎 Explainable Scoring Output
+
+The environment now returns a transparent scoring payload in `info` so evaluators can understand exactly why a score was produced.
+
+- **Per-step output:** `info.reward_breakdown`
+  - cumulative `penalties` and `bonuses` observed so far in the episode
+- **Final-step output (when `done=true`):** `info.score_breakdown`
+  - detailed scoring components for `cost`, `sla`, `carbon`, `inbox_reply_bonus`, and `penalties`
+  - includes `raw_score`, `final_score`, and score-bound metadata
+
+Implementation reference:
+- Per-step `reward_breakdown` is assembled in the engine step response.
+- Final-step `score_breakdown` is attached alongside `grader_score`.
+- Breakdown composition is centralized in `_build_score_breakdown(...)` in `server/cloudfinops_env_environment.py`.
+
+Example final `info` shape:
+
+```json
+{
+  "grader_score": 0.7421,
+  "reward_breakdown": {
+    "penalties": {
+      "high_runtime_cost": 3.0,
+      "upscale_action_cost": 10.0
+    },
+    "bonuses": {
+      "terminate_action": 20.0,
+      "inbox_reply": 2.0
+    }
+  },
+  "score_breakdown": {
+    "task_id": "hard",
+    "raw_score": 0.7421,
+    "final_score": 0.7421,
+    "cost": {
+      "saved_pct": 0.3814,
+      "weight": 0.4,
+      "contribution": 0.1526
+    },
+    "sla": {
+      "breached": false,
+      "weight": 0.6,
+      "contribution": 0.6
+    },
+    "carbon": {
+      "reduction_pct": 0.0,
+      "weight": 0.0,
+      "contribution": 0.0
+    },
+    "inbox_reply_bonus": {
+      "applied": false,
+      "value": 0.0
+    },
+    "penalties": {
+      "grading": {
+        "active_termination": 0.0,
+        "sla_crash_penalty": 0.0
+      }
+    }
+  }
+}
+```
 
 ---
 

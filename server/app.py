@@ -11,6 +11,7 @@ and done=True on step 1.
 import logging
 import os
 import sys
+from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
@@ -69,39 +70,9 @@ class StepRequestBody(BaseModel):
 # ---------------------------------------------------------------------------
 # FastAPI app
 # ---------------------------------------------------------------------------
-app = FastAPI(
-    title="CloudFinOps-Env",
-    version="1.0.0",
-    description="Cloud Cost-Optimization RL Environment — OpenEnv compatible.",
-)
-
-
-@app.get("/")
-async def root() -> Dict[str, Any]:
-    """Root ping endpoint for platform health probes."""
-    return {
-        "status": "ok",
-        "env": "cloudfinops-env",
-        "endpoints": [
-            "/health",
-            "/reset",
-            "/step",
-            "/state",
-            "/schema",
-            "/dashboard",
-            "/history",
-        ],
-    }
-
-
-@app.get("/web")
-async def web_probe() -> Dict[str, Any]:
-    """Compatibility endpoint for external probes that hit /web."""
-    return {"status": "ok", "hint": "Use /dashboard for the live UI"}
-
-
-@app.on_event("startup")
-async def on_startup() -> None:
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Application lifespan hook for startup logging/banner."""
     banner = r"""
     ╔══════════════════════════════════════════════════════════════╗
     ║                                                              ║
@@ -127,6 +98,39 @@ async def on_startup() -> None:
     """
     print(banner)
     log.info("Server started — using persistent singleton environment")
+    yield
+
+
+app = FastAPI(
+    title="CloudFinOps-Env",
+    version="1.0.0",
+    description="Cloud Cost-Optimization RL Environment — OpenEnv compatible.",
+    lifespan=lifespan,
+)
+
+
+@app.get("/")
+async def root() -> Dict[str, Any]:
+    """Root ping endpoint for platform health probes."""
+    return {
+        "status": "ok",
+        "env": "cloudfinops-env",
+        "endpoints": [
+            "/health",
+            "/reset",
+            "/step",
+            "/state",
+            "/schema",
+            "/dashboard",
+            "/history",
+        ],
+    }
+
+
+@app.get("/web")
+async def web_probe() -> Dict[str, Any]:
+    """Compatibility endpoint for external probes that hit /web."""
+    return {"status": "ok", "hint": "Use /dashboard for the live UI"}
 
 
 # ---------------------------------------------------------------------------
