@@ -68,6 +68,7 @@ Real cloud teams constantly trade off cost, SLA risk, and sustainability. This e
 | ⏱️ **Delayed Scaling** | UPSCALE queues for next step — agents must plan ahead |
 | 🔒 **Deterministic Noise** | Hash-seeded metric jitter — fully reproducible episodes |
 | 📈 **Live Dashboard** | Real-time glassmorphism web UI at `/dashboard` with sparklines |
+| 🧠 **LLM Conversational Memory** | Multi-turn conversation history so the agent remembers previous actions and avoids repeating mistakes |
 | 🧪 **84 Unit Tests** | Comprehensive pytest suite with 20 test classes + GitHub Actions CI |
 
 ---
@@ -298,12 +299,17 @@ Each server includes:
 
 The enclosed baseline evaluator (`inference.py`) establishes the reference performance for agents.
 
-| Task | Difficulty | Baseline Score (OpenAI GPT-4o) | Success Status |
+> **Score Range:** All task scores are strictly within the open interval **(0, 1)** — exclusive of both 0.0 and 1.0. The grading engine enforces this constraint via epsilon clamping (`0.001 ≤ score ≤ 0.999`).
+
+![Baseline Evaluation Results](assets/baseline_scores.png)
+
+| Task | Difficulty | Baseline Score (Llama 4 Scout 17B) | Success Status |
 |------|------------|--------------------------------|----------------|
-| `easy` | Easy | 0.9500 | ✅ |
-| `medium` | Medium | 0.8200 | ✅ |
-| `hard` | Hard | 0.7600 | ✅ |
-| `green` | Green | 0.8800 | ✅ |
+| `easy` | Easy | 0.9990 | ✅ |
+| `medium` | Medium | 0.4954 | ✅ |
+| `hard` | Hard | 0.7000 | ✅ |
+| `green` | Green | 0.9499 | ✅ |
+| **Average** | — | **0.7861** | ✅ |
 
 > **Note:** Run the evaluator yourself using the setup and usage instructions above to see the exact real-time scores for your chosen LLM.
 
@@ -413,6 +419,8 @@ Top submissions reviewed by Meta and Hugging Face engineers for real-world utili
 4. **Trailing Metrics** — Designed for LLM agents with limited context memory — trend detection without explicit memory.
 5. **Human-in-the-Loop** — Inbox/reply system tests whether agents can communicate with humans while managing infra.
 6. **Upscale Tier Path** — Enforces realistic upgrade constraints (`t3.micro` → `t3.medium` → `t3.large`, max 2 upgrades).
+7. **LLM Conversational Memory** — The inference agent maintains multi-turn conversation history across all steps within an episode. Each observation sent to the LLM includes: (a) a structured summary of running vs terminated servers, (b) a log of all previous actions and their rewards, and (c) explicit warnings about already-terminated servers. This prevents the most common LLM failure mode — repeatedly targeting the same server — and enables the agent to reason about its own action history for better sequential decision-making.
+8. **Strict Score Range** — All grader scores are clamped to the open interval (0, 1) via epsilon bounds (`0.001 ≤ score ≤ 0.999`), ensuring compliance with hackathon validation requirements.
 
 ---
 

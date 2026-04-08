@@ -84,6 +84,14 @@ def _clamp(val: float, lo: float = 0.0, hi: float = 100.0) -> float:
     return max(lo, min(hi, val))
 
 
+# Epsilon to keep grader scores strictly inside (0, 1) — required by hackathon validator
+_SCORE_EPS = 0.001
+
+def _clamp_score(val: float) -> float:
+    """Clamp a grader score to the open interval (0, 1), exclusive of both endpoints."""
+    return max(_SCORE_EPS, min(1.0 - _SCORE_EPS, val))
+
+
 def _deterministic_noise(seed_str: str, amplitude: float = 2.0) -> float:
     """Return a deterministic pseudo-random noise value in [-amplitude, +amplitude]."""
     h = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
@@ -344,15 +352,17 @@ class CloudFinOpsEngine:
 
     def grade(self) -> float:
         if self.task_id == "easy":
-            return self._grade_easy()
+            raw = self._grade_easy()
         elif self.task_id == "medium":
-            return self._grade_medium()
+            raw = self._grade_medium()
         elif self.task_id == "hard":
-            return self._grade_hard()
+            raw = self._grade_hard()
         elif self.task_id == "green":
-            return self._grade_green()
+            raw = self._grade_green()
         else:
-            return 0.0
+            raw = 0.0
+        # Hackathon validator requires scores strictly in (0, 1)
+        return _clamp_score(raw)
 
     def _grade_easy(self) -> float:
         idle_ids = {f"idle-{i}" for i in range(3)}

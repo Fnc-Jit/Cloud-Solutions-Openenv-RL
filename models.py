@@ -52,6 +52,6 @@ class CloudFinOpsAction(BaseAction):
 class RewardInfo(BaseObservation):
     """Reward signal returned after each step."""
 
-    score: float = Field(0.0, ge=0.0, le=1.0)
+    score: float = Field(0.001, gt=0.0, lt=1.0)
     is_done: bool = False
     feedback: str = ""

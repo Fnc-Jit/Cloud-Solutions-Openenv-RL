@@ -189,7 +189,7 @@ class TestGrading:
         engine.step(CloudFinOpsAction(command="TERMINATE", target_id="idle-1"))
         engine.step(CloudFinOpsAction(command="TERMINATE", target_id="idle-2"))
         score = engine.grade()
-        assert score == 1.0
+        assert score >= 0.999  # clamped to max 0.999
 
     def test_easy_partial_score(self, engine):
         engine.reset("easy")
@@ -203,7 +203,7 @@ class TestGrading:
             for _ in range(MAX_STEPS):
                 engine.step(CloudFinOpsAction(command="IGNORE"))
             score = engine.grade()
-            assert 0.0 <= score <= 1.0, f"Score for {task} out of range: {score}"
+            assert 0.0 < score < 1.0, f"Score for {task} out of range: {score}"
 
     def test_green_grader_rewards_carbon_reduction(self, engine):
         engine.reset("green")
@@ -648,7 +648,7 @@ class TestOptimalPlaySequences:
         engine.step(CloudFinOpsAction(command="TERMINATE", target_id="idle-1"))
         engine.step(CloudFinOpsAction(command="TERMINATE", target_id="idle-2"))
         score = engine.grade()
-        assert score == 1.0
+        assert score >= 0.999  # clamped to max 0.999
 
     def test_easy_terminating_active_reduces_score(self, engine):
         """Easy: terminating active servers should reduce score."""
@@ -760,7 +760,7 @@ class TestGraderBoundaries:
             # Do something harmful
             engine.step(CloudFinOpsAction(command="TERMINATE", target_id=engine.servers[0].id))
             score = engine.grade()
-            assert 0.0 <= score <= 1.0, f"{task}: score {score} out of bounds"
+            assert 0.0 < score < 1.0, f"{task}: score {score} out of bounds"
 
     def test_easy_all_wrong_zero_score(self, engine):
         """Easy: terminating only active servers + no idle cleanup = 0 score."""
@@ -770,7 +770,7 @@ class TestGraderBoundaries:
         engine.step(CloudFinOpsAction(command="TERMINATE", target_id="web-2"))
         engine.step(CloudFinOpsAction(command="TERMINATE", target_id="web-3"))
         score = engine.grade()
-        assert score == 0.0
+        assert score <= 0.001  # clamped to min 0.001
 
     def test_medium_no_savings_low_score(self, engine):
         """Medium: doing nothing should yield low/zero score (no cost savings)."""
